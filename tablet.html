@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Threads — Tablet</title>
+    <meta name="description" content="Choose your connections — tablet controller." />
+    <link rel="stylesheet" href="./style-installation.css" />
+  </head>
+  <body class="tablet-body">
+    <header class="tablet-header">
+      <h1 class="tablet-title">Threads</h1>
+      <p class="tablet-subtitle">Select nodes to connect. Projector updates live.</p>
+    </header>
+
+    <main class="tablet-main">
+      <section class="tablet-section" aria-labelledby="nodes-heading">
+        <h2 id="nodes-heading" class="tablet-section-title">Connect</h2>
+        <div class="tablet-nodes" id="nodes" role="group" aria-label="Nodes to connect"></div>
+        <p class="tablet-hint">Tap to toggle. Empty = all connected.</p>
+      </section>
+
+      <section class="tablet-section" aria-labelledby="style-heading">
+        <h2 id="style-heading" class="tablet-section-title">Style</h2>
+        <div class="tablet-controls">
+          <label class="tablet-control">
+            <span class="tablet-control__label">Color</span>
+            <input type="color" id="threadColor" value="#c49bff" class="tablet-color" />
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Thickness</span>
+            <input type="range" id="threadThickness" min="1" max="6" step="1" value="2" />
+          </label>
+          <label class="tablet-control tablet-control--toggle">
+            <input type="checkbox" id="glow" checked />
+            <span class="tablet-control__label">Glow</span>
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Thread</span>
+            <select id="threadStyle">
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+              <option value="gradient">Gradient</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="tablet-section" aria-labelledby="motion-heading">
+        <h2 id="motion-heading" class="tablet-section-title">Motion</h2>
+        <div class="tablet-controls">
+          <label class="tablet-control">
+            <span class="tablet-control__label">Animation</span>
+            <select id="animation">
+              <option value="static">Static</option>
+              <option value="pulse" selected>Pulse</option>
+              <option value="flow">Flow</option>
+            </select>
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Speed</span>
+            <input type="range" id="animationSpeed" min="0" max="1" step="0.05" value="0.5" />
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Density</span>
+            <input type="range" id="density" min="0.2" max="1" step="0.1" value="0.6" />
+          </label>
+        </div>
+      </section>
+
+      <div class="tablet-actions">
+        <button type="button" class="tablet-btn tablet-btn--secondary" id="reset">Reset</button>
+        <a href="./projector.html" target="_blank" class="tablet-btn tablet-btn--primary" id="openProjector">Open projector</a>
+      </div>
+    </main>
+
+    <script type="module" src="./js/tablet.js"></script>
+  </body>
+</html>
