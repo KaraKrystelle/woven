@@ -153,6 +153,23 @@ body {
   margin: 10px 0 0;
 }
 
+.tablet-participant-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tablet-participant-section {
+  margin-bottom: 4px;
+}
+
+.tablet-participant-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
 .tablet-controls {
   display: flex;
   flex-wrap: wrap;

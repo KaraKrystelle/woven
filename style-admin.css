@@ -1,0 +1,125 @@
+/* Admin screen */
+
+.admin-body {
+  min-height: 100%;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.admin-header {
+  padding: 24px 20px 20px;
+  text-align: center;
+}
+
+.admin-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.admin-subtitle {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.admin-main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 20px 32px;
+}
+
+.admin-section {
+  margin-bottom: 28px;
+}
+
+.admin-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.admin-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-height: 44px;
+}
+
+.admin-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.admin-tag__remove {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 4px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.admin-tag__remove:hover {
+  color: var(--text);
+}
+
+.admin-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.admin-input::placeholder {
+  color: var(--muted);
+}
+
+.admin-btn-add {
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-btn-add:hover {
+  filter: brightness(1.1);
+}
+
+.admin-actions {
+  margin-top: 32px;
+}
+
+.admin-link {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.admin-link:hover {
+  text-decoration: underline;
+}

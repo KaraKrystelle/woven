@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threads — Admin</title>
+    <meta name="description" content="Define exhibit options for tablet participants." />
+    <link rel="stylesheet" href="./style-installation.css" />
+    <link rel="stylesheet" href="./style-admin.css" />
+  </head>
+  <body class="admin-body">
+    <header class="admin-header">
+      <h1 class="admin-title">Threads — Admin</h1>
+      <p class="admin-subtitle">Define options shown to participants on the tablet.</p>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-section" aria-labelledby="countries-heading">
+        <h2 id="countries-heading" class="admin-section-title">Countries where you are from</h2>
+        <div class="admin-list" id="countries-list" data-key="countries"></div>
+        <div class="admin-add">
+          <input type="text" id="countries-input" placeholder="Add country" class="admin-input" />
+          <button type="button" class="admin-btn-add" data-key="countries">Add</button>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="ethnic-heading">
+        <h2 id="ethnic-heading" class="admin-section-title">Your Ethnic Background</h2>
+        <div class="admin-list" id="ethnicBackgrounds-list" data-key="ethnicBackgrounds"></div>
+        <div class="admin-add">
+          <input type="text" id="ethnicBackgrounds-input" placeholder="Add option" class="admin-input" />
+          <button type="button" class="admin-btn-add" data-key="ethnicBackgrounds">Add</button>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="good-heading">
+        <h2 id="good-heading" class="admin-section-title">Good Experiences</h2>
+        <div class="admin-list" id="goodExperiences-list" data-key="goodExperiences"></div>
+        <div class="admin-add">
+          <input type="text" id="goodExperiences-input" placeholder="Add option" class="admin-input" />
+          <button type="button" class="admin-btn-add" data-key="goodExperiences">Add</button>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="bad-heading">
+        <h2 id="bad-heading" class="admin-section-title">Bad Experiences</h2>
+        <div class="admin-list" id="badExperiences-list" data-key="badExperiences"></div>
+        <div class="admin-add">
+          <input type="text" id="badExperiences-input" placeholder="Add option" class="admin-input" />
+          <button type="button" class="admin-btn-add" data-key="badExperiences">Add</button>
+        </div>
+      </section>
+
+      <div class="admin-actions">
+        <a href="./tablet.html" class="admin-link">Preview tablet</a>
+      </div>
+    </main>
+
+    <script type="module" src="./js/admin.js"></script>
+  </body>
+</html>

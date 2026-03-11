@@ -2,6 +2,10 @@
 
 Digital translation of a physical thread installation: **tablet** UI for options → **projector** view with threads connecting according to choices.
 
+## Original prompt
+
+> Start to initialise how I can translate this art installation to P5js, I want them to choose their options on a tablet, which will then translate to the projector that shows the threads being digitally connected according to their options, digitally instead of the physical threads from the art installation.
+
 ## Quick start
 
 1. Serve the project over HTTP (ES modules require it):
@@ -14,14 +18,16 @@ Digital translation of a physical thread installation: **tablet** UI for options
 
 ## Flow
 
-- **Tablet:** touch-friendly options — which nodes to connect (Self, Family, Work, Nature, etc.), thread color, thickness, glow, style (solid/dashed/gradient), animation (static/pulse/flow), speed, density. "Open projector" opens the fullscreen view in a new tab.
-- **Projector:** fullscreen P5.js canvas. Nodes are arranged in a circle; threads are drawn as bezier curves between selected nodes. Press **F** for fullscreen.
+- **Admin** (`admin.html`): define the four participant categories — Countries where you are from, Your Ethnic Background, Good Experiences, Bad Experiences. Each category is a list of options (add/remove). Stored in `localStorage`; tablet reads this config.
+- **Tablet:** shows "Your choices" first (the four admin-defined categories; participants tap to select). Then Connect (nodes), Style, Motion, and "Open projector".
+- **Projector:** fullscreen P5.js canvas. Nodes in a circle; threads as bezier curves between selected nodes. Press **F** for fullscreen.
 
 ## Files
 
-- `tablet.html` + `js/tablet.js` — tablet controller UI
+- `admin.html` + `js/admin.js` + `style-admin.css` — admin: define exhibit options for participants
+- `tablet.html` + `js/tablet.js` — tablet controller UI (participant choices + thread controls)
 - `projector.html` + `js/projector.js` + `js/thread-sketch.js` — projector P5 sketch
-- `js/state.js` — shared options (localStorage sync)
+- `js/state.js` — shared options + config (localStorage)
 - `style-installation.css` — styles for tablet & projector
 
 ## Multi-device (tablet + projector on different machines)

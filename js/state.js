@@ -13,6 +13,8 @@ export const DEFAULT_OPTIONS = {
   connections: [],
   /** 'all' | 'selected' | 'custom' */
   connectionMode: 'selected',
+  /** Participant choices from admin-defined categories (shown on tablet). */
+  participantSelections: { countries: [], ethnicBackgrounds: [], goodExperiences: [], badExperiences: [] },
   /** Thread visuals */
   threadColor: '#c49bff',
   threadThickness: 2,
@@ -68,4 +70,40 @@ export function subscribe(cb) {
   window.addEventListener('storage', handler);
   cb(loadOptions());
   return () => window.removeEventListener('storage', handler);
+}
+
+/* ----- Admin config (exhibit content for tablet) ----- */
+
+const CONFIG_KEY = 'thread-installation-config';
+
+export const DEFAULT_CONFIG = {
+  countries: [],
+  ethnicBackgrounds: [],
+  goodExperiences: [],
+  badExperiences: [],
+};
+
+/**
+ * @returns {typeof DEFAULT_CONFIG}
+ */
+export function loadConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (!raw) return { ...DEFAULT_CONFIG };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_CONFIG, ...parsed };
+  } catch (_) {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+/**
+ * @param {Partial<typeof DEFAULT_CONFIG>} next
+ */
+export function saveConfig(next) {
+  const merged = { ...loadConfig(), ...next };
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(merged));
+  } catch (_) {}
+  return merged;
 }

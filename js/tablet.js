@@ -1,13 +1,20 @@
 /**
  * Tablet UI: touch-friendly options that sync to shared state (localStorage).
+ * Shows admin-defined participant categories (countries, ethnic background, experiences).
  * Projector tab listens via storage events and redraws.
  */
 
-import { loadOptions, saveOptions, DEFAULT_OPTIONS } from './state.js';
-import { NODES } from './thread-sketch.js';
+import { loadOptions, saveOptions, loadConfig, DEFAULT_OPTIONS } from './state.js';
+
+const PARTICIPANT_KEYS = [
+  { key: 'countries', label: 'Countries where you are from' },
+  { key: 'ethnicBackgrounds', label: 'Your Ethnic Background' },
+  { key: 'goodExperiences', label: 'Good Experiences' },
+  { key: 'badExperiences', label: 'Bad Experiences' },
+];
 
 const ids = {
-  nodes: 'nodes',
+  participantCategories: 'participant-categories',
   threadColor: 'threadColor',
   threadThickness: 'threadThickness',
   glow: 'glow',
@@ -23,18 +30,48 @@ function $(id) {
   return document.getElementById(id);
 }
 
-function renderNodes(container, selected) {
-  const sel = new Set(selected || []);
+function renderParticipantCategories(container, config, selected) {
+  if (!container) return;
   container.innerHTML = '';
-  for (const n of NODES) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'tablet-node' + (sel.has(n.id) ? ' tablet-node--on' : '');
-    btn.textContent = n.label;
-    btn.dataset.id = n.id;
-    btn.setAttribute('aria-pressed', sel.has(n.id));
-    container.appendChild(btn);
+  const sel = selected || DEFAULT_OPTIONS.participantSelections;
+  for (const { key, label } of PARTICIPANT_KEYS) {
+    const options = config[key] || [];
+    if (options.length === 0) continue;
+    const set = new Set(sel[key] || []);
+    const section = document.createElement('div');
+    section.className = 'tablet-participant-section';
+    const title = document.createElement('h3');
+    title.className = 'tablet-participant-title';
+    title.textContent = label;
+    section.appendChild(title);
+    const wrap = document.createElement('div');
+    wrap.className = 'tablet-nodes';
+    wrap.setAttribute('data-category', key);
+    options.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tablet-node' + (set.has(opt) ? ' tablet-node--on' : '');
+      btn.textContent = opt;
+      btn.dataset.category = key;
+      btn.dataset.option = opt;
+      btn.setAttribute('aria-pressed', set.has(opt));
+      wrap.appendChild(btn);
+    });
+    section.appendChild(wrap);
+    container.appendChild(section);
   }
+}
+
+function collectParticipantSelections() {
+  const container = $(ids.participantCategories);
+  const out = { countries: [], ethnicBackgrounds: [], goodExperiences: [], badExperiences: [] };
+  if (!container) return out;
+  container.querySelectorAll('.tablet-node--on[data-category][data-option]').forEach((el) => {
+    const cat = el.dataset.category;
+    const opt = el.dataset.option;
+    if (cat && out[cat] && opt) out[cat].push(opt);
+  });
+  return out;
 }
 
 function collectOptions() {
@@ -45,18 +82,11 @@ function collectOptions() {
   const animation = $(ids.animation);
   const speed = $(ids.animationSpeed);
   const density = $(ids.density);
-  const nodesContainer = $(ids.nodes);
-
-  const selectedNodes = [];
-  if (nodesContainer) {
-    nodesContainer.querySelectorAll('.tablet-node--on').forEach((el) => {
-      if (el.dataset.id) selectedNodes.push(el.dataset.id);
-    });
-  }
-
   const sp = parseFloat(speed?.value);
   const den = parseFloat(density?.value);
   return {
+    participantSelections: collectParticipantSelections(),
+    selectedNodes: [],
     threadColor: color?.value ?? DEFAULT_OPTIONS.threadColor,
     threadThickness: thickness?.valueAsNumber ?? DEFAULT_OPTIONS.threadThickness,
     glow: glow?.checked ?? DEFAULT_OPTIONS.glow,
@@ -64,12 +94,14 @@ function collectOptions() {
     animation: animation?.value ?? DEFAULT_OPTIONS.animation,
     animationSpeed: Number.isFinite(sp) ? sp : DEFAULT_OPTIONS.animationSpeed,
     density: Number.isFinite(den) ? den : DEFAULT_OPTIONS.density,
-    selectedNodes,
   };
 }
 
 function applyOptions(opts) {
   const o = { ...DEFAULT_OPTIONS, ...opts };
+  const config = loadConfig();
+  const partContainer = $(ids.participantCategories);
+  if (partContainer) renderParticipantCategories(partContainer, config, o.participantSelections);
   const color = $(ids.threadColor);
   const thickness = $(ids.threadThickness);
   const glow = $(ids.glow);
@@ -77,7 +109,6 @@ function applyOptions(opts) {
   const animation = $(ids.animation);
   const speed = $(ids.animationSpeed);
   const density = $(ids.density);
-  const nodesContainer = $(ids.nodes);
 
   if (color) color.value = o.threadColor ?? '#c49bff';
   if (thickness) thickness.value = o.threadThickness ?? 2;
@@ -86,7 +117,6 @@ function applyOptions(opts) {
   if (animation) animation.value = o.animation ?? 'pulse';
   if (speed) speed.value = o.animationSpeed ?? 0.5;
   if (density) density.value = o.density ?? 0.6;
-  if (nodesContainer) renderNodes(nodesContainer, o.selectedNodes || []);
 }
 
 function persist() {
@@ -94,16 +124,14 @@ function persist() {
 }
 
 function setupListeners() {
-  const nodesContainer = $(ids.nodes);
-  if (nodesContainer) {
-    nodesContainer.addEventListener('click', (e) => {
-      const btn = e.target.closest('.tablet-node');
-      if (!btn) return;
-      btn.classList.toggle('tablet-node--on');
-      btn.setAttribute('aria-pressed', btn.classList.contains('tablet-node--on'));
-      persist();
-    });
-  }
+  const delegate = (e) => {
+    const btn = e.target.closest('.tablet-node');
+    if (!btn) return;
+    btn.classList.toggle('tablet-node--on');
+    btn.setAttribute('aria-pressed', btn.classList.contains('tablet-node--on'));
+    persist();
+  };
+  $(ids.participantCategories)?.addEventListener('click', delegate);
 
   const inputs = [
     ids.threadColor,
@@ -131,7 +159,8 @@ function setupListeners() {
 }
 
 function init() {
-  applyOptions(loadOptions());
+  const opts = loadOptions();
+  applyOptions(opts);
   setupListeners();
 }
 
