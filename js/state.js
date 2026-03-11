@@ -15,6 +15,8 @@ export const DEFAULT_OPTIONS = {
   connectionMode: 'selected',
   /** Participant choices from admin-defined categories (shown on tablet). */
   participantSelections: { countries: [], ethnicBackgrounds: [], goodExperiences: [], badExperiences: [] },
+  /** Submitted threads (each adds to projection); reset tablet after submit. */
+  submittedThreads: [],
   /** Thread visuals */
   threadColor: '#c49bff',
   threadThickness: 2,

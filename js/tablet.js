@@ -23,6 +23,7 @@ const ids = {
   animationSpeed: 'animationSpeed',
   density: 'density',
   reset: 'reset',
+  submit: 'submit',
   openProjector: 'openProjector',
 };
 
@@ -152,8 +153,30 @@ function setupListeners() {
   const reset = $(ids.reset);
   if (reset) {
     reset.addEventListener('click', () => {
-      applyOptions(DEFAULT_OPTIONS);
-      persist();
+      saveOptions({
+        participantSelections: DEFAULT_OPTIONS.participantSelections,
+        threadColor: DEFAULT_OPTIONS.threadColor,
+      });
+      applyOptions(loadOptions());
+    });
+  }
+
+  const submit = $(ids.submit);
+  if (submit) {
+    submit.addEventListener('click', () => {
+      const opts = loadOptions();
+      const sel = opts.participantSelections || DEFAULT_OPTIONS.participantSelections;
+      const hasCountry = (sel.countries || []).length > 0;
+      const hasEthnicity = (sel.ethnicBackgrounds || []).length > 0;
+      if (hasCountry && hasEthnicity) {
+        const submitted = [...(opts.submittedThreads || []), { participantSelections: { ...sel }, threadColor: opts.threadColor ?? DEFAULT_OPTIONS.threadColor }];
+        saveOptions({
+          submittedThreads: submitted,
+          participantSelections: DEFAULT_OPTIONS.participantSelections,
+          threadColor: DEFAULT_OPTIONS.threadColor,
+        });
+        applyOptions(loadOptions());
+      }
     });
   }
 }
