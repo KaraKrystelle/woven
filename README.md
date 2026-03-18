@@ -14,13 +14,24 @@ Digital translation of a physical thread installation: **tablet** UI for options
    ```
 2. **Tablet:** open `http://localhost:3333/tablet.html` on a tablet (or browser tab).
 3. **Projector:** open `http://localhost:3333/projector.html` in another tab or on the projector device.
-4. Choose nodes and style on the tablet; the projector updates live via `localStorage` + `storage` events (same machine, different tabs).
+4. Make choices on the tablet, choose thread style, then **Submit** to add to the projection; the projector updates live via `localStorage` + `storage` events (same machine, different tabs).
+
+## Get updates from GitHub
+
+If you already cloned this repo and want the latest changes:
+
+```bash
+cd /path/to/woven
+git pull
+```
+
+That fetches and merges updates from the default remote branch (usually `main`). If you have local edits that conflict, Git will tell you; resolve conflicts or stash changes first (`git stash`) if you only want to pull cleanly.
 
 ## Flow
 
 - **Admin** (`admin.html`): define the four participant categories — Countries where you are from, Your Ethnic Background, Good Experiences, Bad Experiences. Each category is a list of options (add/remove). Stored in `localStorage`; tablet reads this config.
-- **Tablet:** shows "Your choices" first (the four admin-defined categories; participants tap to select). Then Connect (nodes), Style, Motion, and "Open projector".
-- **Projector:** fullscreen P5.js canvas. Nodes in a circle; threads as bezier curves between selected nodes. Press **F** for fullscreen.
+- **Tablet:** "Your choices" (four categories), Style, Motion, **Submit** (adds thread and resets for next participant), Reset, Open projector.
+- **Projector:** fullscreen P5.js canvas; country → experiences → ethnicity path; threads draw slowly and accumulate. Press **F** for fullscreen.
 
 ## Files
 
