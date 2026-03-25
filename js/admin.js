@@ -1,11 +1,62 @@
 /**
- * Admin UI: define the 4 participant categories (countries, ethnic backgrounds,
- * good/bad experiences). Saved to localStorage; tablet reads via loadConfig().
+ * Admin UI: participant categories + projector style/motion (saved in config).
  */
 
 import { loadConfig, saveConfig, DEFAULT_CONFIG } from './state.js';
 
 const KEYS = ['countries', 'ethnicBackgrounds', 'goodExperiences', 'badExperiences'];
+
+const VISUAL_IDS = [
+  'threadThickness',
+  'glow',
+  'threadStyle',
+  'density',
+  'animation',
+  'animationSpeed',
+];
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+function applyVisualFromConfig(cfg) {
+  const c = { ...DEFAULT_CONFIG, ...cfg };
+  const thickness = $('threadThickness');
+  const glow = $('glow');
+  const style = $('threadStyle');
+  const density = $('density');
+  const animation = $('animation');
+  const speed = $('animationSpeed');
+  if (thickness) thickness.value = c.threadThickness ?? 2;
+  if (glow) glow.checked = c.glow !== false;
+  if (style) style.value = c.threadStyle ?? 'solid';
+  if (density) density.value = c.density ?? 0.6;
+  if (animation) animation.value = c.animation ?? 'pulse';
+  if (speed) speed.value = c.animationSpeed ?? 0.5;
+}
+
+function collectVisualFromForm() {
+  const thickness = $('threadThickness');
+  const glow = $('glow');
+  const style = $('threadStyle');
+  const density = $('density');
+  const animation = $('animation');
+  const speed = $('animationSpeed');
+  const sp = parseFloat(speed?.value);
+  const den = parseFloat(density?.value);
+  return {
+    threadThickness: thickness?.valueAsNumber ?? DEFAULT_CONFIG.threadThickness,
+    glow: glow?.checked ?? DEFAULT_CONFIG.glow,
+    threadStyle: style?.value ?? DEFAULT_CONFIG.threadStyle,
+    density: Number.isFinite(den) ? den : DEFAULT_CONFIG.density,
+    animation: animation?.value ?? DEFAULT_CONFIG.animation,
+    animationSpeed: Number.isFinite(sp) ? sp : DEFAULT_CONFIG.animationSpeed,
+  };
+}
+
+function persistVisual() {
+  saveConfig(collectVisualFromForm());
+}
 
 function renderList(container, items, key) {
   if (!container) return;
@@ -44,6 +95,14 @@ function addItem(key, inputEl) {
 
 function init() {
   const config = loadConfig();
+  applyVisualFromConfig(config);
+
+  VISUAL_IDS.forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    const ev = el.type === 'checkbox' ? 'change' : 'input';
+    el.addEventListener(ev, persistVisual);
+  });
 
   KEYS.forEach((key) => {
     const listEl = document.getElementById(`${key}-list`);

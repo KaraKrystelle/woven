@@ -34,6 +34,31 @@ export const DEFAULT_OPTIONS = {
 const fallback = () => ({ ...DEFAULT_OPTIONS });
 
 /**
+ * Same first country + first ethnicity → same thread colour.
+ * If exhibit config includes a matching entry in comboColors, that colour wins (3b); else stable hash (3a).
+ * @param {{ countries?: string[], ethnicBackgrounds?: string[] }} sel
+ * @param {ReturnType<typeof loadConfig> | null | undefined} exhibitConfig — pass loadConfig() or sketch config; omit to load internally (avoid in hot loops).
+ * @returns {string | null} CSS colour or null if either choice is missing
+ */
+export function threadColorFromCountryEthnicCombo(sel, exhibitConfig) {
+  const country = (sel?.countries || [])[0];
+  const ethnic = (sel?.ethnicBackgrounds || [])[0];
+  if (!country || !ethnic) return null;
+  const cfg = exhibitConfig !== undefined && exhibitConfig !== null ? exhibitConfig : loadConfig();
+  const list = cfg.comboColors || [];
+  const override = list.find((o) => o.country === country && o.ethnicBackground === ethnic);
+  if (override?.color) return override.color;
+  const key = `${country}\0${ethnic}`;
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  const hue = h % 360;
+  return `hsl(${hue}, 72%, 58%)`;
+}
+
+/**
  * @returns {typeof DEFAULT_OPTIONS}
  */
 export function loadOptions() {
@@ -83,6 +108,15 @@ export const DEFAULT_CONFIG = {
   ethnicBackgrounds: [],
   goodExperiences: [],
   badExperiences: [],
+  /** Projector thread appearance & motion (admin). */
+  threadThickness: 2,
+  glow: true,
+  threadStyle: 'solid',
+  density: 0.6,
+  animation: 'pulse',
+  animationSpeed: 0.5,
+  /** Admin overrides: { country, ethnicBackground, color } per pair (hex or any CSS colour). */
+  comboColors: [],
 };
 
 /**

@@ -14,7 +14,7 @@ Digital translation of a physical thread installation: **tablet** UI for options
    ```
 2. **Tablet:** open `http://localhost:3333/tablet.html` on a tablet (or browser tab).
 3. **Projector:** open `http://localhost:3333/projector.html` in another tab or on the projector device.
-4. Make choices on the tablet, choose thread style, then **Submit** to add to the projection; the projector updates live via `localStorage` + `storage` events (same machine, different tabs).
+4. Set **Style** and **Motion** on **Admin** if you like. On the tablet, make choices and **Submit** to add to the projection; the projector updates live via `localStorage` + `storage` events (same machine, different tabs).
 
 ## Get updates from GitHub
 
@@ -29,14 +29,15 @@ That fetches and merges updates from the default remote branch (usually `main`).
 
 ## Flow
 
-- **Admin** (`admin.html`): define the four participant categories — Countries where you are from, Your Ethnic Background, Good Experiences, Bad Experiences. Each category is a list of options (add/remove). Stored in `localStorage`; tablet reads this config.
-- **Tablet:** "Your choices" (four categories), Style, Motion, **Submit** (adds thread and resets for next participant), Reset, Open projector.
+- **Admin** (`admin.html`): four participant categories (lists of options) plus **Style** and **Motion** for the projector. **`admin-combos.html`** — optional **colours by combo** (country + ethnic background → thread colour override). Stored in `localStorage` as exhibit config.
+- **Tablet:** "Your choices" only — **Submit**, Reset, Open projector. Thread colour: hash by country + ethnic background, or admin override from **Colours by combo**.
 - **Projector:** fullscreen P5.js canvas; country → experiences → ethnicity path; threads draw slowly and accumulate. Press **F** for fullscreen.
 
 ## Files
 
-- `admin.html` + `js/admin.js` + `style-admin.css` — admin: define exhibit options for participants
-- `tablet.html` + `js/tablet.js` — tablet controller UI (participant choices + thread controls)
+- `admin.html` + `js/admin.js` + `style-admin.css` — main admin (categories, style, motion)
+- `admin-combos.html` + `js/admin-combos.js` — colour overrides per country + ethnic background pair
+- `tablet.html` + `js/tablet.js` — tablet: participant choices only
 - `projector.html` + `js/projector.js` + `js/thread-sketch.js` — projector P5 sketch
 - `js/state.js` — shared options + config (localStorage)
 - `style-installation.css` — styles for tablet & projector

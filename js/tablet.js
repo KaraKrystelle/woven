@@ -1,10 +1,9 @@
 /**
- * Tablet UI: touch-friendly options that sync to shared state (localStorage).
- * Shows admin-defined participant categories (countries, ethnic background, experiences).
- * Projector tab listens via storage events and redraws.
+ * Tablet UI: touch-friendly participant choices that sync to shared state (localStorage).
+ * Style and motion for the projector are set on the admin screen (config).
  */
 
-import { loadOptions, saveOptions, loadConfig, DEFAULT_OPTIONS } from './state.js';
+import { loadOptions, saveOptions, loadConfig, DEFAULT_OPTIONS, threadColorFromCountryEthnicCombo } from './state.js';
 
 const PARTICIPANT_KEYS = [
   { key: 'countries', label: 'Countries where you are from' },
@@ -15,13 +14,6 @@ const PARTICIPANT_KEYS = [
 
 const ids = {
   participantCategories: 'participant-categories',
-  threadColor: 'threadColor',
-  threadThickness: 'threadThickness',
-  glow: 'glow',
-  threadStyle: 'threadStyle',
-  animation: 'animation',
-  animationSpeed: 'animationSpeed',
-  density: 'density',
   reset: 'reset',
   submit: 'submit',
   openProjector: 'openProjector',
@@ -76,25 +68,12 @@ function collectParticipantSelections() {
 }
 
 function collectOptions() {
-  const color = $(ids.threadColor);
-  const thickness = $(ids.threadThickness);
-  const glow = $(ids.glow);
-  const style = $(ids.threadStyle);
-  const animation = $(ids.animation);
-  const speed = $(ids.animationSpeed);
-  const density = $(ids.density);
-  const sp = parseFloat(speed?.value);
-  const den = parseFloat(density?.value);
+  const sel = collectParticipantSelections();
+  const comboColor = threadColorFromCountryEthnicCombo(sel, loadConfig());
   return {
-    participantSelections: collectParticipantSelections(),
+    participantSelections: sel,
     selectedNodes: [],
-    threadColor: color?.value ?? DEFAULT_OPTIONS.threadColor,
-    threadThickness: thickness?.valueAsNumber ?? DEFAULT_OPTIONS.threadThickness,
-    glow: glow?.checked ?? DEFAULT_OPTIONS.glow,
-    threadStyle: style?.value ?? DEFAULT_OPTIONS.threadStyle,
-    animation: animation?.value ?? DEFAULT_OPTIONS.animation,
-    animationSpeed: Number.isFinite(sp) ? sp : DEFAULT_OPTIONS.animationSpeed,
-    density: Number.isFinite(den) ? den : DEFAULT_OPTIONS.density,
+    threadColor: comboColor ?? DEFAULT_OPTIONS.threadColor,
   };
 }
 
@@ -103,21 +82,6 @@ function applyOptions(opts) {
   const config = loadConfig();
   const partContainer = $(ids.participantCategories);
   if (partContainer) renderParticipantCategories(partContainer, config, o.participantSelections);
-  const color = $(ids.threadColor);
-  const thickness = $(ids.threadThickness);
-  const glow = $(ids.glow);
-  const style = $(ids.threadStyle);
-  const animation = $(ids.animation);
-  const speed = $(ids.animationSpeed);
-  const density = $(ids.density);
-
-  if (color) color.value = o.threadColor ?? '#c49bff';
-  if (thickness) thickness.value = o.threadThickness ?? 2;
-  if (glow) glow.checked = o.glow !== false;
-  if (style) style.value = o.threadStyle ?? 'solid';
-  if (animation) animation.value = o.animation ?? 'pulse';
-  if (speed) speed.value = o.animationSpeed ?? 0.5;
-  if (density) density.value = o.density ?? 0.6;
 }
 
 function persist() {
@@ -133,22 +97,6 @@ function setupListeners() {
     persist();
   };
   $(ids.participantCategories)?.addEventListener('click', delegate);
-
-  const inputs = [
-    ids.threadColor,
-    ids.threadThickness,
-    ids.glow,
-    ids.threadStyle,
-    ids.animation,
-    ids.animationSpeed,
-    ids.density,
-  ];
-  for (const id of inputs) {
-    const el = $(id);
-    if (!el) continue;
-    const ev = el.type === 'checkbox' ? 'change' : 'input';
-    el.addEventListener(ev, persist);
-  }
 
   const reset = $(ids.reset);
   if (reset) {
@@ -169,7 +117,14 @@ function setupListeners() {
       const hasCountry = (sel.countries || []).length > 0;
       const hasEthnicity = (sel.ethnicBackgrounds || []).length > 0;
       if (hasCountry && hasEthnicity) {
-        const submitted = [...(opts.submittedThreads || []), { participantSelections: { ...sel }, threadColor: opts.threadColor ?? DEFAULT_OPTIONS.threadColor }];
+        const savedColor =
+          threadColorFromCountryEthnicCombo(sel, loadConfig()) ??
+          opts.threadColor ??
+          DEFAULT_OPTIONS.threadColor;
+        const submitted = [
+          ...(opts.submittedThreads || []),
+          { participantSelections: { ...sel }, threadColor: savedColor },
+        ];
         saveOptions({
           submittedThreads: submitted,
           participantSelections: DEFAULT_OPTIONS.participantSelections,

@@ -51,7 +51,52 @@
         </div>
       </section>
 
+      <section class="admin-section" aria-labelledby="style-heading">
+        <h2 id="style-heading" class="admin-section-title">Style (projector)</h2>
+        <div class="tablet-controls admin-visual-controls">
+          <label class="tablet-control">
+            <span class="tablet-control__label">Thickness</span>
+            <input type="range" id="threadThickness" min="1" max="6" step="1" value="2" />
+          </label>
+          <label class="tablet-control tablet-control--toggle">
+            <input type="checkbox" id="glow" checked />
+            <span class="tablet-control__label">Glow</span>
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Thread</span>
+            <select id="threadStyle">
+              <option value="solid">Solid</option>
+              <option value="dashed">Dashed</option>
+              <option value="gradient">Gradient</option>
+            </select>
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Density</span>
+            <input type="range" id="density" min="0.2" max="1" step="0.1" value="0.6" />
+          </label>
+        </div>
+      </section>
+
+      <section class="admin-section" aria-labelledby="motion-heading">
+        <h2 id="motion-heading" class="admin-section-title">Motion (projector)</h2>
+        <div class="tablet-controls admin-visual-controls">
+          <label class="tablet-control">
+            <span class="tablet-control__label">Animation</span>
+            <select id="animation">
+              <option value="static">Static</option>
+              <option value="pulse" selected>Pulse</option>
+              <option value="flow">Flow</option>
+            </select>
+          </label>
+          <label class="tablet-control">
+            <span class="tablet-control__label">Speed</span>
+            <input type="range" id="animationSpeed" min="0" max="1" step="0.05" value="0.5" />
+          </label>
+        </div>
+      </section>
+
       <div class="admin-actions">
+        <a href="./admin-combos.html" class="admin-link">Colours by combo</a>
         <a href="./tablet.html" class="admin-link">Preview tablet</a>
       </div>
     </main>

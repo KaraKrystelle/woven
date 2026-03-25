@@ -21,54 +21,6 @@
         <div id="participant-categories" class="tablet-participant-categories"></div>
       </section>
 
-      <section class="tablet-section" aria-labelledby="style-heading">
-        <h2 id="style-heading" class="tablet-section-title">Style</h2>
-        <div class="tablet-controls">
-          <label class="tablet-control">
-            <span class="tablet-control__label">Color</span>
-            <input type="color" id="threadColor" value="#c49bff" class="tablet-color" />
-          </label>
-          <label class="tablet-control">
-            <span class="tablet-control__label">Thickness</span>
-            <input type="range" id="threadThickness" min="1" max="6" step="1" value="2" />
-          </label>
-          <label class="tablet-control tablet-control--toggle">
-            <input type="checkbox" id="glow" checked />
-            <span class="tablet-control__label">Glow</span>
-          </label>
-          <label class="tablet-control">
-            <span class="tablet-control__label">Thread</span>
-            <select id="threadStyle">
-              <option value="solid">Solid</option>
-              <option value="dashed">Dashed</option>
-              <option value="gradient">Gradient</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section class="tablet-section" aria-labelledby="motion-heading">
-        <h2 id="motion-heading" class="tablet-section-title">Motion</h2>
-        <div class="tablet-controls">
-          <label class="tablet-control">
-            <span class="tablet-control__label">Animation</span>
-            <select id="animation">
-              <option value="static">Static</option>
-              <option value="pulse" selected>Pulse</option>
-              <option value="flow">Flow</option>
-            </select>
-          </label>
-          <label class="tablet-control">
-            <span class="tablet-control__label">Speed</span>
-            <input type="range" id="animationSpeed" min="0" max="1" step="0.05" value="0.5" />
-          </label>
-          <label class="tablet-control">
-            <span class="tablet-control__label">Density</span>
-            <input type="range" id="density" min="0.2" max="1" step="0.1" value="0.6" />
-          </label>
-        </div>
-      </section>
-
       <div class="tablet-actions">
         <button type="button" class="tablet-btn tablet-btn--secondary" id="reset">Reset</button>
         <button type="button" class="tablet-btn tablet-btn--primary" id="submit">Submit</button>

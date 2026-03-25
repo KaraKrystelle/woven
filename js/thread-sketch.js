@@ -4,7 +4,25 @@
  * Threads animate in slowly; labels fade in/out briefly as thread passes each node.
  */
 
-import { loadOptions, subscribe, loadConfig, DEFAULT_OPTIONS } from './state.js';
+import {
+  loadOptions,
+  subscribe,
+  loadConfig,
+  DEFAULT_OPTIONS,
+  DEFAULT_CONFIG,
+  threadColorFromCountryEthnicCombo,
+} from './state.js';
+
+function resolveVisual(cfg, opts) {
+  return {
+    threadThickness: cfg.threadThickness ?? opts.threadThickness ?? DEFAULT_CONFIG.threadThickness,
+    glow: cfg.glow !== undefined && cfg.glow !== null ? cfg.glow : opts.glow !== false,
+    threadStyle: cfg.threadStyle ?? opts.threadStyle ?? DEFAULT_CONFIG.threadStyle,
+    density: cfg.density ?? opts.density ?? DEFAULT_CONFIG.density,
+    animation: cfg.animation ?? opts.animation ?? DEFAULT_CONFIG.animation,
+    animationSpeed: cfg.animationSpeed ?? opts.animationSpeed ?? DEFAULT_CONFIG.animationSpeed,
+  };
+}
 
 const THREAD_GROW_SPEED = 0.007;
 const LABEL_FADE_SPAN = 0.2;
@@ -143,6 +161,7 @@ export function createThreadSketch(containerId) {
   let pathProgress = 0;
   let lastPathKey = '';
   const submittedProgress = [];
+  let vis = resolveVisual(config, options);
 
   function refreshNodes(p) {
     config = loadConfig();
@@ -167,8 +186,8 @@ export function createThreadSketch(containerId) {
   function drawThreadPartial(p, a, b, color, progress) {
     const ctx = p.drawingContext;
     const col = color || options.threadColor || '#c49bff';
-    const thick = Math.max(1, (options.threadThickness || 2) * (options.density ?? 0.6));
-    const glow = options.glow !== false;
+    const thick = Math.max(1, (vis.threadThickness || 2) * (vis.density ?? 0.6));
+    const glow = vis.glow !== false;
     const { cx, cy } = getBezierControl(p, a, b);
 
     if (glow && ctx) {
@@ -181,7 +200,7 @@ export function createThreadSketch(containerId) {
     p.strokeWeight(thick);
     p.noFill();
 
-    if (options.threadStyle === 'dashed' && ctx) ctx.setLineDash([8, 12]);
+    if (vis.threadStyle === 'dashed' && ctx) ctx.setLineDash([8, 12]);
     else if (ctx) ctx.setLineDash([]);
 
     const steps = Math.max(2, Math.ceil(progress * 24));
@@ -199,13 +218,14 @@ export function createThreadSketch(containerId) {
     }
   }
 
-  function drawNode(p, n, isSelected) {
+  function drawNode(p, n, isSelected, accentColor) {
+    const accent = accentColor || options.threadColor || '#c49bff';
     const size = isSelected ? 12 : 6;
     p.noStroke();
-    p.fill(isSelected ? (options.threadColor || '#c49bff') : 'rgba(255,255,255,0.25)');
+    p.fill(isSelected ? accent : 'rgba(255,255,255,0.25)');
     const ctx = p.drawingContext;
-    if (options.glow && isSelected && ctx) {
-      ctx.shadowColor = options.threadColor || '#c49bff';
+    if (vis.glow && isSelected && ctx) {
+      ctx.shadowColor = accent;
       ctx.shadowBlur = 16;
     }
     p.circle(n.x, n.y, size);
@@ -235,27 +255,30 @@ export function createThreadSketch(containerId) {
       options = loadOptions();
       config = loadConfig();
       refreshNodes(p);
+      vis = resolveVisual(config, options);
       unsub = subscribe((opts) => {
         options = opts;
+        vis = resolveVisual(config, options);
         refreshNodes(p);
       });
     };
 
     p.draw = function () {
-      const spd = 0.3 + (options.animationSpeed ?? 0.5) * 0.4;
-      if (options.animation === 'pulse') {
+      refreshNodes(p);
+      vis = resolveVisual(config, options);
+      const spd = 0.3 + (vis.animationSpeed ?? 0.5) * 0.4;
+      if (vis.animation === 'pulse') {
         const glow = 0.5 + 0.5 * Math.sin(p.frameCount * 0.03 * spd);
         p.background(8, 10, 18, 20 + 8 * glow);
-      } else if (options.animation === 'flow') {
+      } else if (vis.animation === 'flow') {
         p.background(8, 10, 18, 18);
       } else {
         p.background(8, 10, 18, 28);
       }
-
-      refreshNodes(p);
       const submitted = options.submittedThreads || [];
       const sel = options.participantSelections || DEFAULT_OPTIONS.participantSelections;
-      const threadColor = options.threadColor || '#c49bff';
+      const threadColor =
+        threadColorFromCountryEthnicCombo(sel, config) || options.threadColor || '#c49bff';
       const selectedIds = getSelectedIds(sel);
 
       while (submittedProgress.length < submitted.length) submittedProgress.push(0);
@@ -265,7 +288,10 @@ export function createThreadSketch(containerId) {
 
       submitted.forEach((item, idx) => {
         const subPath = getThreadPath(nodes, item.participantSelections || {});
-        const col = item.threadColor || threadColor;
+        const col =
+          threadColorFromCountryEthnicCombo(item.participantSelections || {}, config) ||
+          item.threadColor ||
+          threadColor;
         let prog = submittedProgress[idx] ?? 0;
         prog = Math.min(1, prog + THREAD_GROW_SPEED);
         submittedProgress[idx] = prog;
@@ -315,7 +341,7 @@ export function createThreadSketch(containerId) {
         labelOpacity.set(b.id, Math.max(labelOpacity.get(b.id) ?? 0, oEnd));
       }
 
-      for (const n of nodes) drawNode(p, n, selectedIds.has(n.id));
+      for (const n of nodes) drawNode(p, n, selectedIds.has(n.id), threadColor);
       labelOpacity.forEach((opacity, nodeId) => {
         const n = nodes.find((nn) => nn.id === nodeId);
         if (n) drawLabel(p, n, opacity);

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threads — Colours by combo</title>
+    <meta name="description" content="Override thread colours for country + ethnic background pairs." />
+    <link rel="stylesheet" href="./style-installation.css" />
+    <link rel="stylesheet" href="./style-admin.css" />
+  </head>
+  <body class="admin-body">
+    <header class="admin-header">
+      <h1 class="admin-title">Colours by combo</h1>
+      <p class="admin-subtitle">
+        Set a colour for each country + ethnic background pair. Participants with that pair get this colour instead of the automatic hue.
+      </p>
+    </header>
+
+    <main class="admin-main">
+      <p class="admin-combo-note" id="combo-empty-note" hidden>
+        Add countries and ethnic options on the <a href="./admin.html">main admin</a> page first, then return here.
+      </p>
+
+      <div id="combo-rows" class="combo-rows" aria-live="polite"></div>
+
+      <div class="admin-combo-actions">
+        <button type="button" class="admin-btn-add" id="addComboRow">Add combo</button>
+      </div>
+
+      <div class="admin-actions">
+        <a href="./admin.html" class="admin-link">← Main admin</a>
+        <a href="./tablet.html" class="admin-link">Preview tablet</a>
+      </div>
+    </main>
+
+    <script type="module" src="./js/admin-combos.js"></script>
+  </body>
+</html>
