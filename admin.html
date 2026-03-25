@@ -95,6 +95,21 @@
         </div>
       </section>
 
+      <section class="admin-section" aria-labelledby="backup-heading">
+        <h2 id="backup-heading" class="admin-section-title">Backup &amp; restore</h2>
+        <p class="admin-backup-hint">
+          All exhibit data lives in this browser’s <strong>localStorage</strong> (until cleared). Export a JSON file to keep a copy; import replaces saved data on this device.
+        </p>
+        <div class="admin-backup-actions">
+          <button type="button" class="admin-btn-add" id="exportBackup">Export JSON</button>
+          <label class="admin-backup-import-label">
+            <span class="admin-btn-add admin-btn-add--secondary">Import JSON…</span>
+            <input type="file" id="importBackup" accept="application/json,.json" hidden />
+          </label>
+        </div>
+        <p class="admin-backup-status" id="backupStatus" role="status"></p>
+      </section>
+
       <div class="admin-actions">
         <a href="./admin-combos.html" class="admin-link">Colours by combo</a>
         <a href="./tablet.html" class="admin-link">Preview tablet</a>

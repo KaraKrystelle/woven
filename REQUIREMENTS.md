@@ -46,6 +46,11 @@ Translate a physical thread-based art installation to a digital one in P5.js: pa
 
 ---
 
+## Persistence and backup
+
+- **localStorage** holds session/options (`thread-installation-options`) and exhibit config (`thread-installation-config`). Data survives reloads until the user or browser clears site data.
+- **Admin — Backup & restore:** export a JSON file with both blobs; import replaces saved data on that browser (with confirmation).
+
 ## Sync and technical constraints
 
 - **Same machine:** Tablet and projector can run in different tabs; options and submitted threads are synced via `localStorage` and `storage` events.

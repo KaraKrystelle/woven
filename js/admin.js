@@ -2,7 +2,13 @@
  * Admin UI: participant categories + projector style/motion (saved in config).
  */
 
-import { loadConfig, saveConfig, DEFAULT_CONFIG } from './state.js';
+import {
+  loadConfig,
+  saveConfig,
+  DEFAULT_CONFIG,
+  buildInstallationBackup,
+  applyInstallationBackup,
+} from './state.js';
 
 const KEYS = ['countries', 'ethnicBackgrounds', 'goodExperiences', 'badExperiences'];
 
@@ -118,6 +124,48 @@ function init() {
         doAdd();
       }
     });
+  });
+
+  const statusEl = $('backupStatus');
+  const setStatus = (msg) => {
+    if (statusEl) statusEl.textContent = msg || '';
+  };
+
+  $('exportBackup')?.addEventListener('click', () => {
+    try {
+      const payload = buildInstallationBackup();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `woven-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('Export downloaded.');
+    } catch (e) {
+      setStatus(`Export failed: ${e?.message || e}`);
+    }
+  });
+
+  $('importBackup')?.addEventListener('change', async (e) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    setStatus('');
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!confirm('Replace saved data on this browser with this file? This cannot be undone.')) {
+        input.value = '';
+        return;
+      }
+      applyInstallationBackup(data);
+      setStatus('Import complete. Reloading…');
+      setTimeout(() => location.reload(), 400);
+    } catch (err) {
+      setStatus(`Import failed: ${err?.message || err}`);
+      input.value = '';
+    }
   });
 }
 

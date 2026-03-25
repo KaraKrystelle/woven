@@ -29,7 +29,7 @@ That fetches and merges updates from the default remote branch (usually `main`).
 
 ## Flow
 
-- **Admin** (`admin.html`): four participant categories (lists of options) plus **Style** and **Motion** for the projector. **`admin-combos.html`** — optional **colours by combo** (country + ethnic background → thread colour override). Stored in `localStorage` as exhibit config.
+- **Admin** (`admin.html`): categories, style/motion, **Export / Import JSON** (full backup of `localStorage` options + config). **`admin-combos.html`** — colour overrides per pair. Data persists in the browser until cleared; export for an off-device copy.
 - **Tablet:** "Your choices" only — **Submit**, Reset, Open projector. Thread colour: hash by country + ethnic background, or admin override from **Colours by combo**.
 - **Projector:** fullscreen P5.js canvas; country → experiences → ethnicity path; threads draw slowly and accumulate. Press **F** for fullscreen.
 

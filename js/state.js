@@ -143,3 +143,47 @@ export function saveConfig(next) {
   } catch (_) {}
   return merged;
 }
+
+/** Backup file format (export / import). */
+export const INSTALLATION_BACKUP_VERSION = 1;
+
+/**
+ * Snapshot of everything persisted in this browser (options + exhibit config).
+ */
+export function buildInstallationBackup() {
+  return {
+    version: INSTALLATION_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    app: 'woven',
+    options: loadOptions(),
+    config: loadConfig(),
+  };
+}
+
+/**
+ * Replace localStorage from a backup object. Merges each top-level object with defaults.
+ * @param {unknown} data
+ */
+export function applyInstallationBackup(data) {
+  if (!data || typeof data !== 'object') throw new Error('Invalid file: expected a JSON object.');
+  const d = /** @type {Record<string, unknown>} */ (data);
+  const ver = d.version;
+  if (ver !== undefined && ver !== INSTALLATION_BACKUP_VERSION) {
+    throw new Error(`Unsupported backup version: ${ver}`);
+  }
+  if (d.options !== undefined && (typeof d.options !== 'object' || d.options === null)) {
+    throw new Error('Invalid options in backup.');
+  }
+  if (d.config !== undefined && (typeof d.config !== 'object' || d.config === null)) {
+    throw new Error('Invalid config in backup.');
+  }
+  if (d.options) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULT_OPTIONS, ...d.options }));
+  }
+  if (d.config) {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...DEFAULT_CONFIG, ...d.config }));
+  }
+  if (!d.options && !d.config) {
+    throw new Error('Backup must include "options" and/or "config".');
+  }
+}
