@@ -261,6 +261,8 @@ export function createThreadSketch(containerId) {
       while (submittedProgress.length < submitted.length) submittedProgress.push(0);
       submittedProgress.length = submitted.length;
 
+      const labelOpacity = new Map();
+
       submitted.forEach((item, idx) => {
         const subPath = getThreadPath(nodes, item.participantSelections || {});
         const col = item.threadColor || threadColor;
@@ -274,7 +276,14 @@ export function createThreadSketch(containerId) {
           if (position <= i) continue;
           const segProg = position - i;
           const full = segProg >= 1;
-          drawThreadPartial(p, subPath[i], subPath[i + 1], col, full ? 1 : segProg);
+          const partial = full ? 1 : segProg;
+          const a = subPath[i];
+          const b = subPath[i + 1];
+          drawThreadPartial(p, a, b, col, partial);
+          const oStart = labelOpacityAtProgress(partial, true);
+          const oEnd = labelOpacityAtProgress(partial, false);
+          labelOpacity.set(a.id, Math.max(labelOpacity.get(a.id) ?? 0, oStart));
+          labelOpacity.set(b.id, Math.max(labelOpacity.get(b.id) ?? 0, oEnd));
         }
       });
 
@@ -290,7 +299,6 @@ export function createThreadSketch(containerId) {
 
       const numSegments = path.length - 1;
       const position = pathProgress * numSegments;
-      const labelOpacity = new Map();
 
       for (let i = 0; i < numSegments; i++) {
         const a = path[i];
