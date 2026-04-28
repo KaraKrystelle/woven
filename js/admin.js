@@ -3,11 +3,13 @@
  */
 
 import {
+  initState,
   loadConfig,
   saveConfig,
   DEFAULT_CONFIG,
   buildInstallationBackup,
   applyInstallationBackup,
+  subscribeConfig,
 } from './state.js';
 
 const KEYS = ['countries', 'ethnicBackgrounds', 'goodExperiences', 'badExperiences'];
@@ -61,7 +63,7 @@ function collectVisualFromForm() {
 }
 
 function persistVisual() {
-  saveConfig(collectVisualFromForm());
+  saveConfig(collectVisualFromForm()).catch(() => {});
 }
 
 function renderList(container, items, key) {
@@ -80,7 +82,7 @@ function renderList(container, items, key) {
       const config = loadConfig();
       const list = [...(config[key] || [])];
       list.splice(i, 1);
-      saveConfig({ [key]: list });
+      saveConfig({ [key]: list }).catch(() => {});
       renderList(container, list, key);
     });
     tag.appendChild(remove);
@@ -93,15 +95,24 @@ function addItem(key, inputEl) {
   if (!val) return;
   const config = loadConfig();
   const list = [...(config[key] || []), val];
-  saveConfig({ [key]: list });
+  saveConfig({ [key]: list }).catch(() => {});
   const listEl = document.getElementById(`${key}-list`);
   renderList(listEl, list, key);
   if (inputEl) inputEl.value = '';
 }
 
-function init() {
-  const config = loadConfig();
+function renderFromConfig(config) {
   applyVisualFromConfig(config);
+  KEYS.forEach((key) => {
+    const listEl = document.getElementById(`${key}-list`);
+    renderList(listEl, config[key] || [], key);
+  });
+}
+
+async function init() {
+  await initState();
+  const config = loadConfig();
+  renderFromConfig(config);
 
   VISUAL_IDS.forEach((id) => {
     const el = $(id);
@@ -111,10 +122,8 @@ function init() {
   });
 
   KEYS.forEach((key) => {
-    const listEl = document.getElementById(`${key}-list`);
     const inputEl = document.getElementById(`${key}-input`);
     const btn = document.querySelector(`.admin-btn-add[data-key="${key}"]`);
-    renderList(listEl, config[key] || [], key);
 
     const doAdd = () => addItem(key, inputEl);
     btn?.addEventListener('click', doAdd);
@@ -159,13 +168,17 @@ function init() {
         input.value = '';
         return;
       }
-      applyInstallationBackup(data);
+      await applyInstallationBackup(data);
       setStatus('Import complete. Reloading…');
       setTimeout(() => location.reload(), 400);
     } catch (err) {
       setStatus(`Import failed: ${err?.message || err}`);
       input.value = '';
     }
+  });
+
+  subscribeConfig((nextConfig) => {
+    renderFromConfig(nextConfig);
   });
 }
 

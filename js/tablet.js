@@ -3,7 +3,15 @@
  * Style and motion for the projector are set on the admin screen (config).
  */
 
-import { loadOptions, saveOptions, loadConfig, DEFAULT_OPTIONS, threadColorFromCountryEthnicCombo } from './state.js';
+import {
+  initState,
+  loadOptions,
+  saveOptions,
+  loadConfig,
+  DEFAULT_OPTIONS,
+  threadColorFromCountryEthnicCombo,
+  subscribeConfig,
+} from './state.js';
 
 const PARTICIPANT_KEYS = [
   { key: 'countries', label: 'Countries where you are from' },
@@ -85,7 +93,7 @@ function applyOptions(opts) {
 }
 
 function persist() {
-  saveOptions(collectOptions());
+  saveOptions(collectOptions()).catch(() => {});
 }
 
 function setupListeners() {
@@ -104,7 +112,7 @@ function setupListeners() {
       saveOptions({
         participantSelections: DEFAULT_OPTIONS.participantSelections,
         threadColor: DEFAULT_OPTIONS.threadColor,
-      });
+      }).catch(() => {});
       applyOptions(loadOptions());
     });
   }
@@ -129,17 +137,21 @@ function setupListeners() {
           submittedThreads: submitted,
           participantSelections: DEFAULT_OPTIONS.participantSelections,
           threadColor: DEFAULT_OPTIONS.threadColor,
-        });
+        }).catch(() => {});
         applyOptions(loadOptions());
       }
     });
   }
 }
 
-function init() {
+async function init() {
+  await initState();
   const opts = loadOptions();
   applyOptions(opts);
   setupListeners();
+  subscribeConfig(() => {
+    applyOptions(loadOptions());
+  });
 }
 
 init();

@@ -8,13 +8,18 @@ Digital translation of a physical thread installation: **tablet** UI for options
 
 ## Quick start
 
-1. Serve the project over HTTP (ES modules require it):
+1. Start the shared server:
    ```bash
-   python3 -m http.server 3333
+   npm start
    ```
-2. **Tablet:** open `http://localhost:3333/tablet.html` on a tablet (or browser tab).
-3. **Projector:** open `http://localhost:3333/projector.html` in another tab or on the projector device.
-4. Set **Style** and **Motion** on **Admin** if you like. On the tablet, make choices and **Submit** to add to the projection; the projector updates live via `localStorage` + `storage` events (same machine, different tabs).
+   or:
+   ```bash
+   node server.js
+   ```
+2. On the main machine, open `http://localhost:3333/admin.html`.
+3. On the projector machine/browser, open `http://localhost:3333/projector.html`.
+4. On the tablet, open `http://YOUR-COMPUTER-IP:3333/tablet.html` using the same Wi-Fi/network.
+5. Set **Style** and **Motion** on **Admin**. On the tablet, make choices and **Submit** to add to the projection; admin, tablet, and projector stay in sync through the shared server.
 
 ## Get updates from GitHub
 
@@ -29,7 +34,7 @@ That fetches and merges updates from the default remote branch (usually `main`).
 
 ## Flow
 
-- **Admin** (`admin.html`): categories, style/motion, **Export / Import JSON** (full backup of `localStorage` options + config). **`admin-combos.html`** — colour overrides per pair. Data persists in the browser until cleared; export for an off-device copy.
+- **Admin** (`admin.html`): categories, style/motion, **Export / Import JSON** (full backup of shared state + config). **`admin-combos.html`** — colour overrides per pair. The server keeps the shared exhibit state in `data/state.json`; browsers also keep a local cache so the UI can still fall back during local prototyping.
 - **Tablet:** "Your choices" only — **Submit**, Reset, Open projector. Thread colour: hash by country + ethnic background, or admin override from **Colours by combo**.
 - **Projector:** fullscreen P5.js canvas; country → experiences → ethnicity path; threads draw slowly and accumulate. Press **F** for fullscreen.
 
@@ -39,9 +44,20 @@ That fetches and merges updates from the default remote branch (usually `main`).
 - `admin-combos.html` + `js/admin-combos.js` — colour overrides per country + ethnic background pair
 - `tablet.html` + `js/tablet.js` — tablet: participant choices only
 - `projector.html` + `js/projector.js` + `js/thread-sketch.js` — projector P5 sketch
-- `js/state.js` — shared options + config (localStorage)
+- `js/state.js` — shared client state layer (server first, local fallback)
+- `server.js` — tiny shared server + event stream for admin/tablet/projector sync
 - `style-installation.css` — styles for tablet & projector
 
-## Multi-device (tablet + projector on different machines)
+## Multi-device
 
-`localStorage` sync only works across tabs on the same origin. For separate devices, you'd add a small backend (e.g. WebSockets or a sync API) and have the tablet push options and the projector poll or subscribe.
+Run `server.js` on the main machine, then open the pages from that machine's network IP. Example:
+
+```bash
+node server.js
+```
+
+- Admin: `http://192.168.1.23:3333/admin.html`
+- Tablet: `http://192.168.1.23:3333/tablet.html`
+- Projector: `http://192.168.1.23:3333/projector.html`
+
+All three clients connect to the same shared state API and live event stream.

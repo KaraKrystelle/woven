@@ -2,7 +2,7 @@
  * Admin screen: override thread colour per country + ethnic background pair (3b).
  */
 
-import { loadConfig, saveConfig } from './state.js';
+import { initState, loadConfig, saveConfig, subscribeConfig } from './state.js';
 
 const rowsEl = document.getElementById('combo-rows');
 const addBtn = document.getElementById('addComboRow');
@@ -38,7 +38,7 @@ function readRowsFromDom() {
 
 function persist() {
   const comboColors = readRowsFromDom();
-  saveConfig({ comboColors });
+  saveConfig({ comboColors }).catch(() => {});
 }
 
 function renderRow(entry, countries, ethnicBackgrounds) {
@@ -132,8 +132,10 @@ function addEmptyRow() {
 
 addBtn?.addEventListener('click', addEmptyRow);
 
-window.addEventListener('storage', (e) => {
-  if (e.key === 'thread-installation-config') render();
-});
+async function init() {
+  await initState();
+  render();
+  subscribeConfig(() => render());
+}
 
-render();
+init();
