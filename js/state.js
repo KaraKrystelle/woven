@@ -1,10 +1,27 @@
 /**
  * Shared state for tablet ↔ projector sync.
- * Uses localStorage + storage events so tablet (one tab) and projector
- * (another tab) stay in sync on the same machine.
+ * Same origin: `localStorage` + `storage` events (other tabs) + `BroadcastChannel`
+ * so updates propagate immediately when the browser omits or delays storage events.
  */
 
 const STORAGE_KEY = 'thread-installation-options';
+const CONFIG_KEY = 'thread-installation-config';
+const SYNC_CHANNEL_NAME = 'woven-installation-sync';
+
+/** @type {BroadcastChannel | null} */
+let syncChannel = null;
+
+function getSyncChannel() {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  if (!syncChannel) syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  return syncChannel;
+}
+
+function broadcastInstallationSync() {
+  try {
+    getSyncChannel()?.postMessage({ type: 'woven-sync', t: Date.now() });
+  } catch (_) {}
+}
 
 export const DEFAULT_OPTIONS = {
   /** Which nodes to include (ids). Empty = all. */
@@ -80,12 +97,14 @@ export function saveOptions(next) {
   const merged = { ...prev, ...next };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    broadcastInstallationSync();
   } catch (_) {}
   return merged;
 }
 
 /**
  * Subscribe to options changes (e.g. from tablet in another tab).
+ * Prefer {@link subscribeInstallation} for the projector so config changes sync too.
  * @param {(opts: typeof DEFAULT_OPTIONS) => void} cb
  * @returns {() => void} unsubscribe
  */
@@ -99,9 +118,38 @@ export function subscribe(cb) {
   return () => window.removeEventListener('storage', handler);
 }
 
-/* ----- Admin config (exhibit content for tablet) ----- */
+/**
+ * Subscribe to any tablet/session options or exhibit config change (other tabs / same profile).
+ * Reload both with `loadOptions()` and `loadConfig()` inside your callback.
+ * @param {() => void} cb
+ * @param {{ useBroadcastChannel?: boolean }} [opts] — set `useBroadcastChannel: false` on the tablet so this tab does not react to its own writes (same-tab channel echo).
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeInstallation(cb, opts = {}) {
+  const { useBroadcastChannel = true } = opts;
+  const run = () => cb();
 
-const CONFIG_KEY = 'thread-installation-config';
+  const onStorage = (e) => {
+    if (e.storageArea !== localStorage) return;
+    if (e.key !== STORAGE_KEY && e.key !== CONFIG_KEY) return;
+    run();
+  };
+
+  const ch = useBroadcastChannel ? getSyncChannel() : null;
+  const onMessage = (ev) => {
+    if (ev.data?.type === 'woven-sync') run();
+  };
+  ch?.addEventListener('message', onMessage);
+
+  window.addEventListener('storage', onStorage);
+  run();
+  return () => {
+    window.removeEventListener('storage', onStorage);
+    ch?.removeEventListener('message', onMessage);
+  };
+}
+
+/* ----- Admin config (exhibit content for tablet) ----- */
 
 export const DEFAULT_CONFIG = {
   countries: [],
@@ -140,6 +188,7 @@ export function saveConfig(next) {
   const merged = { ...loadConfig(), ...next };
   try {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(merged));
+    broadcastInstallationSync();
   } catch (_) {}
   return merged;
 }
@@ -186,4 +235,5 @@ export function applyInstallationBackup(data) {
   if (!d.options && !d.config) {
     throw new Error('Backup must include "options" and/or "config".');
   }
+  broadcastInstallationSync();
 }

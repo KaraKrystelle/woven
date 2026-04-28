@@ -6,7 +6,7 @@
 
 import {
   loadOptions,
-  subscribe,
+  subscribeInstallation,
   loadConfig,
   DEFAULT_OPTIONS,
   DEFAULT_CONFIG,
@@ -229,7 +229,7 @@ export function createThreadSketch(containerId) {
       ctx.shadowBlur = 16;
     }
     p.circle(n.x, n.y, size);
-    if (ctx && options.glow) ctx.shadowBlur = 0;
+    if (ctx && vis.glow) ctx.shadowBlur = 0;
   }
 
   function drawLabel(p, n, opacity) {
@@ -256,8 +256,9 @@ export function createThreadSketch(containerId) {
       config = loadConfig();
       refreshNodes(p);
       vis = resolveVisual(config, options);
-      unsub = subscribe((opts) => {
-        options = opts;
+      unsub = subscribeInstallation(() => {
+        options = loadOptions();
+        config = loadConfig();
         vis = resolveVisual(config, options);
         refreshNodes(p);
       });

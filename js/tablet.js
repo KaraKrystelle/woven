@@ -3,7 +3,14 @@
  * Style and motion for the projector are set on the admin screen (config).
  */
 
-import { loadOptions, saveOptions, loadConfig, DEFAULT_OPTIONS, threadColorFromCountryEthnicCombo } from './state.js';
+import {
+  loadOptions,
+  saveOptions,
+  loadConfig,
+  DEFAULT_OPTIONS,
+  threadColorFromCountryEthnicCombo,
+  subscribeInstallation,
+} from './state.js';
 
 const PARTICIPANT_KEYS = [
   { key: 'countries', label: 'Countries where you are from' },
@@ -140,6 +147,12 @@ function init() {
   const opts = loadOptions();
   applyOptions(opts);
   setupListeners();
+  subscribeInstallation(
+    () => {
+      applyOptions(loadOptions());
+    },
+    { useBroadcastChannel: false }
+  );
 }
 
 init();

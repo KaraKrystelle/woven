@@ -14,7 +14,7 @@ Digital translation of a physical thread installation: **tablet** UI for options
    ```
 2. **Tablet:** open `http://localhost:3333/tablet.html` on a tablet (or browser tab).
 3. **Projector:** open `http://localhost:3333/projector.html` in another tab or on the projector device.
-4. Set **Style** and **Motion** on **Admin** if you like. On the tablet, make choices and **Submit** to add to the projection; the projector updates live via `localStorage` + `storage` events (same machine, different tabs).
+4. Set **Style** and **Motion** on **Admin** if you like. On the tablet, make choices and **Submit** to add to the projection; the projector stays in sync via `localStorage`, cross-tab `storage` events, and `BroadcastChannel` (same origin).
 
 ## Get updates from GitHub
 
@@ -44,4 +44,4 @@ That fetches and merges updates from the default remote branch (usually `main`).
 
 ## Multi-device (tablet + projector on different machines)
 
-`localStorage` sync only works across tabs on the same origin. For separate devices, you'd add a small backend (e.g. WebSockets or a sync API) and have the tablet push options and the projector poll or subscribe.
+Tab sync requires the **same origin** (same URL host/port). For separate physical devices, add a backend (e.g. WebSockets) to push options and config.

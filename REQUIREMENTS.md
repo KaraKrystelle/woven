@@ -53,6 +53,6 @@ Translate a physical thread-based art installation to a digital one in P5.js: pa
 
 ## Sync and technical constraints
 
-- **Same machine:** Tablet and projector can run in different tabs; options and submitted threads are synced via `localStorage` and `storage` events.
+- **Same machine:** Tablet and projector (and admin) share one origin. Writes go to `localStorage`; other tabs are notified via the **`storage` event** (for both options and exhibit config) and via **`BroadcastChannel`** (`woven-installation-sync`) so the projector and tablet refresh even when a browser is slow or inconsistent about `storage`. The projector reloads options and config on every such signal; the tablet reapplies the latest options when they change elsewhere.
 - **Multi-device:** If the tablet and projector are on different machines, a backend (e.g. WebSockets or sync API) is required to push options and submitted threads from the tablet and have the projector subscribe or poll.
 - The app is served over HTTP (ES modules); no build step is required for the current setup.

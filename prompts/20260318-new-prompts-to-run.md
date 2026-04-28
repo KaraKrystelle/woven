@@ -10,4 +10,4 @@
 
 4. [x] persist all the data permanently (on the browser localStorage) and admin has option to export to a file and ability to import
 
-5. make the tablet and projection sync
+5. [x] make the tablet and projection sync
