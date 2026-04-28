@@ -158,17 +158,33 @@ export function createThreadSketch(containerId) {
   let config = loadConfig();
   let unsub = null;
   let nodes = [];
+  let nodeById = new Map();
   let pathProgress = 0;
   let lastPathKey = '';
   const submittedProgress = [];
+  const submittedCache = [];
   let vis = resolveVisual(config, options);
+  let nodesVersion = 0;
+  let nodesDirty = true;
+  let layerDirty = true;
+  let completedLayer = null;
+  let lastConfigSnapshot = JSON.stringify(config);
+  let lastSubmittedSnapshot = JSON.stringify(options.submittedThreads || []);
+
+  function markLayerDirty() {
+    layerDirty = true;
+  }
 
   function refreshNodes(p) {
-    config = loadConfig();
+    if (!nodesDirty) return;
     const raw = buildNodesFromConfig(config);
     const w = p.width || p.windowWidth || 1920;
     const h = p.height || p.windowHeight || 1080;
     nodes = getNodePositions(p, raw, w, h);
+    nodeById = new Map(nodes.map((n) => [n.id, n]));
+    nodesVersion += 1;
+    nodesDirty = false;
+    markLayerDirty();
   }
 
   function getBezierControl(p, a, b) {
@@ -183,8 +199,8 @@ export function createThreadSketch(containerId) {
     return { cx: midX + perpX * sag, cy: midY + perpY * sag };
   }
 
-  function drawThreadPartial(p, a, b, color, progress) {
-    const ctx = p.drawingContext;
+  function drawThreadPartial(target, a, b, color, progress, p) {
+    const ctx = target.drawingContext;
     const col = color || options.threadColor || '#c49bff';
     const thick = Math.max(1, (vis.threadThickness || 2) * (vis.density ?? 0.6));
     const glow = vis.glow !== false;
@@ -196,9 +212,9 @@ export function createThreadSketch(containerId) {
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
     }
-    p.stroke(col);
-    p.strokeWeight(thick);
-    p.noFill();
+    target.stroke(col);
+    target.strokeWeight(thick);
+    target.noFill();
 
     if (vis.threadStyle === 'dashed' && ctx) ctx.setLineDash([8, 12]);
     else if (ctx) ctx.setLineDash([]);
@@ -209,13 +225,97 @@ export function createThreadSketch(containerId) {
       const t1 = ((i + 1) / steps) * progress;
       const pt0 = bezierPoint(t0, a.x, a.y, cx, cy, b.x, b.y);
       const pt1 = bezierPoint(t1, a.x, a.y, cx, cy, b.x, b.y);
-      p.line(pt0.x, pt0.y, pt1.x, pt1.y);
+      target.line(pt0.x, pt0.y, pt1.x, pt1.y);
     }
 
     if (ctx) {
       ctx.setLineDash([]);
       if (glow) ctx.shadowBlur = 0;
     }
+  }
+
+  function getCachedPath(sel) {
+    const country = (sel.countries || [])[0];
+    const ethnicity = (sel.ethnicBackgrounds || [])[0];
+    const countryNode = country ? nodeById.get(`countries:${country}`) : null;
+    const ethnicityNode = ethnicity ? nodeById.get(`ethnicBackgrounds:${ethnicity}`) : null;
+    if (!countryNode || !ethnicityNode) return [];
+
+    const good = (sel.goodExperiences || [])
+      .map((l) => nodeById.get(`goodExperiences:${l}`))
+      .filter(Boolean);
+    const bad = (sel.badExperiences || [])
+      .map((l) => nodeById.get(`badExperiences:${l}`))
+      .filter(Boolean);
+    const experiences = [...good, ...bad];
+
+    const path = [countryNode];
+    let current = countryNode;
+    const remaining = [...experiences];
+
+    while (remaining.length > 0) {
+      let best = 0;
+      let bestD = dist(current, remaining[0]);
+      for (let i = 1; i < remaining.length; i++) {
+        const d = dist(current, remaining[i]);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      current = remaining[best];
+      path.push(current);
+      remaining.splice(best, 1);
+    }
+
+    path.push(ethnicityNode);
+    return path;
+  }
+
+  function getSubmittedEntry(item, idx) {
+    const sel = item.participantSelections || {};
+    const key = JSON.stringify(sel);
+    const cached = submittedCache[idx];
+    if (cached && cached.key === key && cached.nodesVersion === nodesVersion) return cached;
+    const entry = {
+      key,
+      nodesVersion,
+      path: getCachedPath(sel),
+    };
+    submittedCache[idx] = entry;
+    return entry;
+  }
+
+  function ensureCompletedLayer(p) {
+    if (!completedLayer) {
+      completedLayer = p.createGraphics(p.width, p.height);
+      completedLayer.pixelDensity(1);
+      markLayerDirty();
+      return;
+    }
+    if (completedLayer.width !== p.width || completedLayer.height !== p.height) {
+      completedLayer.resizeCanvas(p.width, p.height);
+      markLayerDirty();
+    }
+  }
+
+  function redrawCompletedLayer(p, submitted, currentThreadColor) {
+    ensureCompletedLayer(p);
+    if (!completedLayer || !layerDirty) return;
+    completedLayer.clear();
+    submitted.forEach((item, idx) => {
+      if ((submittedProgress[idx] ?? 0) < 1) return;
+      const entry = getSubmittedEntry(item, idx);
+      const col =
+        threadColorFromCountryEthnicCombo(item.participantSelections || {}, config) ||
+        item.threadColor ||
+        currentThreadColor;
+      const numSeg = entry.path.length - 1;
+      for (let i = 0; i < numSeg; i++) {
+        drawThreadPartial(completedLayer, entry.path[i], entry.path[i + 1], col, 1, p);
+      }
+    });
+    layerDirty = false;
   }
 
   function drawNode(p, n, isSelected, accentColor) {
@@ -257,10 +357,19 @@ export function createThreadSketch(containerId) {
       refreshNodes(p);
       vis = resolveVisual(config, options);
       unsub = subscribeInstallation(() => {
-        options = loadOptions();
-        config = loadConfig();
+        const nextOptions = loadOptions();
+        const nextConfig = loadConfig();
+        const configChanged = JSON.stringify(nextConfig) !== lastConfigSnapshot;
+        const submittedChanged =
+          JSON.stringify(nextOptions.submittedThreads || []) !== lastSubmittedSnapshot;
+
+        options = nextOptions;
+        config = nextConfig;
+        lastConfigSnapshot = JSON.stringify(config);
+        lastSubmittedSnapshot = JSON.stringify(options.submittedThreads || []);
         vis = resolveVisual(config, options);
-        refreshNodes(p);
+        if (configChanged) nodesDirty = true;
+        if (configChanged || submittedChanged) markLayerDirty();
       });
     };
 
@@ -284,18 +393,26 @@ export function createThreadSketch(containerId) {
 
       while (submittedProgress.length < submitted.length) submittedProgress.push(0);
       submittedProgress.length = submitted.length;
+      submittedCache.length = submitted.length;
+
+      redrawCompletedLayer(p, submitted, threadColor);
+      if (completedLayer) p.image(completedLayer, 0, 0, p.width, p.height);
 
       const labelOpacity = new Map();
 
       submitted.forEach((item, idx) => {
-        const subPath = getThreadPath(nodes, item.participantSelections || {});
+        const entry = getSubmittedEntry(item, idx);
+        const subPath = entry.path;
         const col =
           threadColorFromCountryEthnicCombo(item.participantSelections || {}, config) ||
           item.threadColor ||
           threadColor;
         let prog = submittedProgress[idx] ?? 0;
         prog = Math.min(1, prog + THREAD_GROW_SPEED);
+        const wasComplete = (submittedProgress[idx] ?? 0) >= 1;
         submittedProgress[idx] = prog;
+        if (!wasComplete && prog >= 1) markLayerDirty();
+        if (prog >= 1) return;
 
         const numSeg = subPath.length - 1;
         const position = prog * numSeg;
@@ -306,7 +423,7 @@ export function createThreadSketch(containerId) {
           const partial = full ? 1 : segProg;
           const a = subPath[i];
           const b = subPath[i + 1];
-          drawThreadPartial(p, a, b, col, partial);
+          drawThreadPartial(p, a, b, col, partial, p);
           const oStart = labelOpacityAtProgress(partial, true);
           const oEnd = labelOpacityAtProgress(partial, false);
           labelOpacity.set(a.id, Math.max(labelOpacity.get(a.id) ?? 0, oStart));
@@ -334,7 +451,7 @@ export function createThreadSketch(containerId) {
         const segmentProgress = position - i;
         const full = segmentProgress >= 1;
         const partial = full ? 1 : segmentProgress;
-        drawThreadPartial(p, a, b, threadColor, full ? 1 : partial);
+        drawThreadPartial(p, a, b, threadColor, full ? 1 : partial, p);
 
         const oStart = labelOpacityAtProgress(partial, true);
         const oEnd = labelOpacityAtProgress(partial, false);
@@ -351,6 +468,7 @@ export function createThreadSketch(containerId) {
 
     p.windowResized = function () {
       p.resizeCanvas(p.windowWidth, p.windowHeight);
+      nodesDirty = true;
       refreshNodes(p);
     };
 
