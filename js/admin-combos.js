@@ -41,6 +41,12 @@ function persist() {
   saveConfig({ comboColors }).catch(() => {});
 }
 
+function isRowComplete(row) {
+  const country = row.querySelector('[data-field="country"]')?.value?.trim() || '';
+  const ethnicBackground = row.querySelector('[data-field="ethnicBackground"]')?.value?.trim() || '';
+  return Boolean(country && ethnicBackground);
+}
+
 function renderRow(entry, countries, ethnicBackgrounds) {
   const row = document.createElement('div');
   row.className = 'combo-row';
@@ -71,7 +77,10 @@ function renderRow(entry, countries, ethnicBackgrounds) {
   remove.setAttribute('aria-label', 'Remove row');
   remove.textContent = '×';
 
-  const onChange = () => persist();
+  const onChange = () => {
+    if (!isRowComplete(row)) return;
+    persist();
+  };
   countrySel.addEventListener('change', onChange);
   ethnicSel.addEventListener('change', onChange);
   colorIn.addEventListener('input', onChange);
