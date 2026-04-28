@@ -18,7 +18,7 @@ Translate a physical thread-based art installation to a digital one in P5.js: pa
   2. **Your Ethnic Background**
   3. **Good Experiences**
   4. **Bad Experiences**
-- These lists are stored in `localStorage` and read by the tablet so the same origin can present the configured options.
+- These lists are stored in shared exhibit state on the local server, with browser cache as a fallback during local-only testing.
 
 ---
 
@@ -48,11 +48,12 @@ Translate a physical thread-based art installation to a digital one in P5.js: pa
 
 ## Persistence and backup
 
-- **localStorage** holds session/options (`thread-installation-options`) and exhibit config (`thread-installation-config`). Data survives reloads until the user or browser clears site data.
-- **Admin — Backup & restore:** export a JSON file with both blobs; import replaces saved data on that browser (with confirmation).
+- The exhibit uses a small shared server so **admin**, **tablet**, and **projector** on separate devices can all read the same state.
+- The server persists session/options and exhibit config in a JSON file on disk. Browsers may also cache the latest state locally for fallback.
+- **Admin — Backup & restore:** export a JSON file with both options and config; import replaces the saved exhibit data (with confirmation).
 
 ## Sync and technical constraints
 
-- **Same machine:** Tablet and projector (and admin) share one origin. Writes go to `localStorage`; other tabs are notified via the **`storage` event** (for both options and exhibit config) and via **`BroadcastChannel`** (`woven-installation-sync`) so the projector and tablet refresh even when a browser is slow or inconsistent about `storage`. The projector reloads options and config on every such signal; the tablet reapplies the latest options when they change elsewhere.
-- **Multi-device:** If the tablet and projector are on different machines, a backend (e.g. WebSockets or sync API) is required to push options and submitted threads from the tablet and have the projector subscribe or poll.
-- The app is served over HTTP (ES modules); no build step is required for the current setup.
+- **Same machine:** Admin, tablet, and projector can run in separate tabs and all connect to the same local server.
+- **Multi-device:** Tablet and projector can run on different machines/browsers as long as they can reach the host machine over the same network.
+- The app is served over HTTP by a lightweight Node server that also provides the shared state API and live event stream; no build step is required for the current setup.

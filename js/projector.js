@@ -4,9 +4,12 @@
  */
 
 import { createThreadSketch } from './thread-sketch.js';
+import { initState } from './state.js';
 
 const containerId = 'projector-canvas';
 const container = document.getElementById(containerId) || document.body;
-const sketch = createThreadSketch(containerId);
 
-new p5(sketch, container);
+initState().finally(() => {
+  const sketch = createThreadSketch(containerId);
+  new p5(sketch, container);
+});

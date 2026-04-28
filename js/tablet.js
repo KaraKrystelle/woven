@@ -4,6 +4,7 @@
  */
 
 import {
+  initState,
   loadOptions,
   saveOptions,
   loadConfig,
@@ -92,7 +93,7 @@ function applyOptions(opts) {
 }
 
 function persist() {
-  saveOptions(collectOptions());
+  saveOptions(collectOptions()).catch(() => {});
 }
 
 function setupListeners() {
@@ -111,7 +112,7 @@ function setupListeners() {
       saveOptions({
         participantSelections: DEFAULT_OPTIONS.participantSelections,
         threadColor: DEFAULT_OPTIONS.threadColor,
-      });
+      }).catch(() => {});
       applyOptions(loadOptions());
     });
   }
@@ -136,23 +137,21 @@ function setupListeners() {
           submittedThreads: submitted,
           participantSelections: DEFAULT_OPTIONS.participantSelections,
           threadColor: DEFAULT_OPTIONS.threadColor,
-        });
+        }).catch(() => {});
         applyOptions(loadOptions());
       }
     });
   }
 }
 
-function init() {
+async function init() {
+  await initState();
   const opts = loadOptions();
   applyOptions(opts);
   setupListeners();
-  subscribeInstallation(
-    () => {
-      applyOptions(loadOptions());
-    },
-    { useBroadcastChannel: false }
-  );
+  subscribeInstallation(() => {
+    applyOptions(loadOptions());
+  });
 }
 
 init();

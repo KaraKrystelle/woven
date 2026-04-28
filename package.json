@@ -1,0 +1,9 @@
+{
+  "name": "woven",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Multi-device thread installation prototype",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

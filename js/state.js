@@ -1,61 +1,154 @@
 /**
- * Shared state for tablet ↔ projector sync.
- * Same origin: `localStorage` + `storage` events (other tabs) + `BroadcastChannel`
- * so updates propagate immediately when the browser omits or delays storage events.
+ * Shared state for admin ↔ tablet ↔ projector sync.
+ * Prefers the shared backend (`/api/state`) so multiple devices can see the same
+ * data. Falls back to localStorage for local prototyping if the backend is absent.
  */
 
 const STORAGE_KEY = 'thread-installation-options';
 const CONFIG_KEY = 'thread-installation-config';
-const SYNC_CHANNEL_NAME = 'woven-installation-sync';
-
-/** @type {BroadcastChannel | null} */
-let syncChannel = null;
-
-function getSyncChannel() {
-  if (typeof BroadcastChannel === 'undefined') return null;
-  if (!syncChannel) syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
-  return syncChannel;
-}
-
-function broadcastInstallationSync() {
-  try {
-    getSyncChannel()?.postMessage({ type: 'woven-sync', t: Date.now() });
-  } catch (_) {}
-}
+const STATE_EVENT = 'woven:state-changed';
 
 export const DEFAULT_OPTIONS = {
-  /** Which nodes to include (ids). Empty = all. */
   selectedNodes: [],
-  /** Which pairs are connected. [[a,b],[b,c]] or empty = auto from selected. */
   connections: [],
-  /** 'all' | 'selected' | 'custom' */
   connectionMode: 'selected',
-  /** Participant choices from admin-defined categories (shown on tablet). */
   participantSelections: { countries: [], ethnicBackgrounds: [], goodExperiences: [], badExperiences: [] },
-  /** Submitted threads (each adds to projection); reset tablet after submit. */
   submittedThreads: [],
-  /** Thread visuals */
   threadColor: '#c49bff',
   threadThickness: 2,
   glow: true,
-  /** 'solid' | 'dashed' | 'gradient' */
   threadStyle: 'solid',
-  /** 0–1 */
   density: 0.6,
-  /** 'static' | 'pulse' | 'flow' */
   animation: 'pulse',
-  /** 0–1 */
   animationSpeed: 0.5,
 };
 
-const fallback = () => ({ ...DEFAULT_OPTIONS });
+export const DEFAULT_CONFIG = {
+  countries: [],
+  ethnicBackgrounds: [],
+  goodExperiences: [],
+  badExperiences: [],
+  threadThickness: 2,
+  glow: true,
+  threadStyle: 'solid',
+  density: 0.6,
+  animation: 'pulse',
+  animationSpeed: 0.5,
+  comboColors: [],
+};
+
+export const INSTALLATION_BACKUP_VERSION = 1;
+
+const state = {
+  options: readLocalOptions(),
+  config: readLocalConfig(),
+};
+
+let initPromise = null;
+let backendMode = false;
+let eventSource = null;
+
+function mergeOptions(raw) {
+  return { ...DEFAULT_OPTIONS, ...(raw || {}) };
+}
+
+function mergeConfig(raw) {
+  return { ...DEFAULT_CONFIG, ...(raw || {}) };
+}
+
+function emitStateChange() {
+  window.dispatchEvent(
+    new CustomEvent(STATE_EVENT, { detail: { options: state.options, config: state.config } })
+  );
+}
+
+function persistLocalCache() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.options));
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(state.config));
+  } catch (_) {}
+}
+
+function readLocalJson(key, defaults) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { ...defaults };
+    return { ...defaults, ...JSON.parse(raw) };
+  } catch (_) {
+    return { ...defaults };
+  }
+}
+
+function readLocalOptions() {
+  return readLocalJson(STORAGE_KEY, DEFAULT_OPTIONS);
+}
+
+function readLocalConfig() {
+  return readLocalJson(CONFIG_KEY, DEFAULT_CONFIG);
+}
+
+async function requestJson(path, options) {
+  const res = await fetch(path, {
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    ...options,
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function applyRemoteState(payload) {
+  state.options = mergeOptions(payload?.options);
+  state.config = mergeConfig(payload?.config);
+  persistLocalCache();
+  emitStateChange();
+}
+
+function ensureEventStream() {
+  if (!backendMode || eventSource || typeof EventSource === 'undefined') return;
+  eventSource = new EventSource('/api/events');
+  eventSource.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload?.type === 'state') applyRemoteState(payload);
+    } catch (_) {}
+  };
+  eventSource.onerror = () => {
+    eventSource?.close();
+    eventSource = null;
+  };
+}
+
+export async function initState() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        const payload = await requestJson('/api/state');
+        backendMode = true;
+        applyRemoteState(payload);
+        ensureEventStream();
+      } catch (_) {
+        backendMode = false;
+        state.options = readLocalOptions();
+        state.config = readLocalConfig();
+        emitStateChange();
+      }
+      return { options: state.options, config: state.config };
+    })();
+  }
+  return initPromise;
+}
+
+export function isBackendMode() {
+  return backendMode;
+}
 
 /**
- * Same first country + first ethnicity → same thread colour.
- * If exhibit config includes a matching entry in comboColors, that colour wins (3b); else stable hash (3a).
+ * Same first country + first ethnicity -> same thread colour.
+ * Matching admin combo override wins; otherwise a stable hue is derived.
  * @param {{ countries?: string[], ethnicBackgrounds?: string[] }} sel
- * @param {ReturnType<typeof loadConfig> | null | undefined} exhibitConfig — pass loadConfig() or sketch config; omit to load internally (avoid in hot loops).
- * @returns {string | null} CSS colour or null if either choice is missing
+ * @param {ReturnType<typeof loadConfig> | null | undefined} exhibitConfig
+ * @returns {string | null}
  */
 export function threadColorFromCountryEthnicCombo(sel, exhibitConfig) {
   const country = (sel?.countries || [])[0];
@@ -71,134 +164,111 @@ export function threadColorFromCountryEthnicCombo(sel, exhibitConfig) {
     h ^= key.charCodeAt(i);
     h = Math.imul(h, 16777619) >>> 0;
   }
-  const hue = h % 360;
-  return `hsl(${hue}, 72%, 58%)`;
+  return `hsl(${h % 360}, 72%, 58%)`;
 }
 
-/**
- * @returns {typeof DEFAULT_OPTIONS}
- */
 export function loadOptions() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_OPTIONS };
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_OPTIONS, ...parsed };
-  } catch (_) {
-    return fallback();
+  return mergeOptions(state.options);
+}
+
+export async function saveOptions(next) {
+  state.options = mergeOptions({ ...state.options, ...next });
+  persistLocalCache();
+  emitStateChange();
+  if (backendMode) {
+    const payload = await requestJson('/api/options', {
+      method: 'PUT',
+      body: JSON.stringify(state.options),
+    });
+    applyRemoteState(payload);
   }
+  return state.options;
 }
 
 /**
- * @param {Partial<typeof DEFAULT_OPTIONS>} next
- */
-export function saveOptions(next) {
-  const prev = loadOptions();
-  const merged = { ...prev, ...next };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    broadcastInstallationSync();
-  } catch (_) {}
-  return merged;
-}
-
-/**
- * Subscribe to options changes (e.g. from tablet in another tab).
- * Prefer {@link subscribeInstallation} for the projector so config changes sync too.
+ * Subscribe to options changes.
  * @param {(opts: typeof DEFAULT_OPTIONS) => void} cb
- * @returns {() => void} unsubscribe
+ * @returns {() => void}
  */
 export function subscribe(cb) {
-  const handler = (e) => {
+  const onLocal = (e) => cb(e.detail?.options || loadOptions());
+  const onStorage = (e) => {
+    if (backendMode) return;
     if (e.key !== STORAGE_KEY || e.storageArea !== localStorage) return;
+    state.options = readLocalOptions();
     cb(loadOptions());
   };
-  window.addEventListener('storage', handler);
+  window.addEventListener(STATE_EVENT, onLocal);
+  window.addEventListener('storage', onStorage);
   cb(loadOptions());
-  return () => window.removeEventListener('storage', handler);
+  ensureEventStream();
+  return () => {
+    window.removeEventListener(STATE_EVENT, onLocal);
+    window.removeEventListener('storage', onStorage);
+  };
 }
 
 /**
- * Subscribe to any tablet/session options or exhibit config change (other tabs / same profile).
- * Reload both with `loadOptions()` and `loadConfig()` inside your callback.
+ * Subscribe to any installation state changes (options/config).
+ * Useful for projector and tablet views that depend on both.
  * @param {() => void} cb
- * @param {{ useBroadcastChannel?: boolean }} [opts] — set `useBroadcastChannel: false` on the tablet so this tab does not react to its own writes (same-tab channel echo).
- * @returns {() => void} unsubscribe
+ * @returns {() => void}
  */
-export function subscribeInstallation(cb, opts = {}) {
-  const { useBroadcastChannel = true } = opts;
-  const run = () => cb();
-
+export function subscribeInstallation(cb) {
+  const onLocal = () => cb();
   const onStorage = (e) => {
+    if (backendMode) return;
     if (e.storageArea !== localStorage) return;
     if (e.key !== STORAGE_KEY && e.key !== CONFIG_KEY) return;
-    run();
+    state.options = readLocalOptions();
+    state.config = readLocalConfig();
+    cb();
   };
-
-  const ch = useBroadcastChannel ? getSyncChannel() : null;
-  const onMessage = (ev) => {
-    if (ev.data?.type === 'woven-sync') run();
-  };
-  ch?.addEventListener('message', onMessage);
-
+  window.addEventListener(STATE_EVENT, onLocal);
   window.addEventListener('storage', onStorage);
-  run();
+  cb();
+  ensureEventStream();
   return () => {
+    window.removeEventListener(STATE_EVENT, onLocal);
     window.removeEventListener('storage', onStorage);
-    ch?.removeEventListener('message', onMessage);
+  };
+}
+export function loadConfig() {
+  return mergeConfig(state.config);
+}
+
+export async function saveConfig(next) {
+  state.config = mergeConfig({ ...state.config, ...next });
+  persistLocalCache();
+  emitStateChange();
+  if (backendMode) {
+    const payload = await requestJson('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify(state.config),
+    });
+    applyRemoteState(payload);
+  }
+  return state.config;
+}
+
+export function subscribeConfig(cb) {
+  const onLocal = (e) => cb(e.detail?.config || loadConfig());
+  const onStorage = (e) => {
+    if (backendMode) return;
+    if (e.key !== CONFIG_KEY || e.storageArea !== localStorage) return;
+    state.config = readLocalConfig();
+    cb(loadConfig());
+  };
+  window.addEventListener(STATE_EVENT, onLocal);
+  window.addEventListener('storage', onStorage);
+  cb(loadConfig());
+  ensureEventStream();
+  return () => {
+    window.removeEventListener(STATE_EVENT, onLocal);
+    window.removeEventListener('storage', onStorage);
   };
 }
 
-/* ----- Admin config (exhibit content for tablet) ----- */
-
-export const DEFAULT_CONFIG = {
-  countries: [],
-  ethnicBackgrounds: [],
-  goodExperiences: [],
-  badExperiences: [],
-  /** Projector thread appearance & motion (admin). */
-  threadThickness: 2,
-  glow: true,
-  threadStyle: 'solid',
-  density: 0.6,
-  animation: 'pulse',
-  animationSpeed: 0.5,
-  /** Admin overrides: { country, ethnicBackground, color } per pair (hex or any CSS colour). */
-  comboColors: [],
-};
-
-/**
- * @returns {typeof DEFAULT_CONFIG}
- */
-export function loadConfig() {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_CONFIG, ...parsed };
-  } catch (_) {
-    return { ...DEFAULT_CONFIG };
-  }
-}
-
-/**
- * @param {Partial<typeof DEFAULT_CONFIG>} next
- */
-export function saveConfig(next) {
-  const merged = { ...loadConfig(), ...next };
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(merged));
-    broadcastInstallationSync();
-  } catch (_) {}
-  return merged;
-}
-
-/** Backup file format (export / import). */
-export const INSTALLATION_BACKUP_VERSION = 1;
-
-/**
- * Snapshot of everything persisted in this browser (options + exhibit config).
- */
 export function buildInstallationBackup() {
   return {
     version: INSTALLATION_BACKUP_VERSION,
@@ -210,15 +280,14 @@ export function buildInstallationBackup() {
 }
 
 /**
- * Replace localStorage from a backup object. Merges each top-level object with defaults.
+ * Replace saved state from a backup object.
  * @param {unknown} data
  */
-export function applyInstallationBackup(data) {
+export async function applyInstallationBackup(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid file: expected a JSON object.');
   const d = /** @type {Record<string, unknown>} */ (data);
-  const ver = d.version;
-  if (ver !== undefined && ver !== INSTALLATION_BACKUP_VERSION) {
-    throw new Error(`Unsupported backup version: ${ver}`);
+  if (d.version !== undefined && d.version !== INSTALLATION_BACKUP_VERSION) {
+    throw new Error(`Unsupported backup version: ${d.version}`);
   }
   if (d.options !== undefined && (typeof d.options !== 'object' || d.options === null)) {
     throw new Error('Invalid options in backup.');
@@ -226,14 +295,27 @@ export function applyInstallationBackup(data) {
   if (d.config !== undefined && (typeof d.config !== 'object' || d.config === null)) {
     throw new Error('Invalid config in backup.');
   }
-  if (d.options) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...DEFAULT_OPTIONS, ...d.options }));
-  }
-  if (d.config) {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...DEFAULT_CONFIG, ...d.config }));
-  }
   if (!d.options && !d.config) {
     throw new Error('Backup must include "options" and/or "config".');
   }
-  broadcastInstallationSync();
+  if (d.options) state.options = mergeOptions(d.options);
+  if (d.config) state.config = mergeConfig(d.config);
+  persistLocalCache();
+  emitStateChange();
+  if (backendMode) {
+    if (d.config) {
+      const payload = await requestJson('/api/config', {
+        method: 'PUT',
+        body: JSON.stringify(state.config),
+      });
+      applyRemoteState(payload);
+    }
+    if (d.options) {
+      const payload = await requestJson('/api/options', {
+        method: 'PUT',
+        body: JSON.stringify(state.options),
+      });
+      applyRemoteState(payload);
+    }
+  }
 }
