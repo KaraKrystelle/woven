@@ -27,7 +27,7 @@ const ids = {
   openProjector: 'openProjector',
   version: 'tablet-version',
 };
-const TABLET_VERSION = 'v2026.04.28.1';
+const TABLET_VERSION = 'v2026.04.28.2';
 
 let draftSelections = {
   countries: [],
@@ -105,6 +105,16 @@ function applyOptions(opts) {
 }
 
 function setupListeners() {
+  let lastTouchToggleAt = 0;
+  let lastTouchToggleKey = '';
+
+  const getButtonFromEvent = (e) => {
+    const target = e.target instanceof Element ? e.target : null;
+    return target?.closest('.tablet-node') || null;
+  };
+
+  const buttonKey = (btn) => `${btn.dataset.category || ''}:${btn.dataset.option || ''}`;
+
   const toggleButton = (btn) => {
     if (!btn) return;
     const cat = btn.dataset.category;
@@ -120,18 +130,35 @@ function setupListeners() {
     btn.blur();
   };
   const container = $(ids.participantCategories);
-  container?.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
-    const target = e.target instanceof Element ? e.target : null;
-    const btn = target?.closest('.tablet-node');
-    if (!btn) return;
-    toggleButton(btn);
-    e.preventDefault();
-  });
+  if (window.PointerEvent) {
+    container?.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      const btn = getButtonFromEvent(e);
+      if (!btn) return;
+      lastTouchToggleAt = Date.now();
+      lastTouchToggleKey = buttonKey(btn);
+      toggleButton(btn);
+      e.preventDefault();
+    });
+  } else {
+    container?.addEventListener(
+      'touchstart',
+      (e) => {
+        const btn = getButtonFromEvent(e);
+        if (!btn) return;
+        lastTouchToggleAt = Date.now();
+        lastTouchToggleKey = buttonKey(btn);
+        toggleButton(btn);
+        e.preventDefault();
+      },
+      { passive: false }
+    );
+  }
   container?.addEventListener('click', (e) => {
-    const target = e.target instanceof Element ? e.target : null;
-    const btn = target?.closest('.tablet-node');
+    const btn = getButtonFromEvent(e);
     if (!btn) return;
+    const now = Date.now();
+    if (now - lastTouchToggleAt < 700 && buttonKey(btn) === lastTouchToggleKey) return;
     // Mouse clicks and keyboard activation (Enter/Space) toggle here.
     toggleButton(btn);
   });

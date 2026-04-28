@@ -187,7 +187,7 @@ export function createThreadSketch(containerId) {
     markLayerDirty();
   }
 
-  function getBezierControl(p, a, b) {
+  function getBezierControl(a, b) {
     const midX = (a.x + b.x) / 2;
     const midY = (a.y + b.y) / 2;
     const dx = b.x - a.x;
@@ -195,7 +195,7 @@ export function createThreadSketch(containerId) {
     const len = Math.hypot(dx, dy) || 1;
     const perpX = -dy / len;
     const perpY = dx / len;
-    const sag = len * 0.08 * (0.7 + 0.3 * Math.sin(p.frameCount * 0.02));
+    const sag = len * 0.08;
     return { cx: midX + perpX * sag, cy: midY + perpY * sag };
   }
 
@@ -204,7 +204,7 @@ export function createThreadSketch(containerId) {
     const col = color || options.threadColor || '#c49bff';
     const thick = Math.max(1, (vis.threadThickness || 2) * (vis.density ?? 0.6));
     const glow = vis.glow !== false;
-    const { cx, cy } = getBezierControl(p, a, b);
+    const { cx, cy } = getBezierControl(a, b);
 
     if (glow && ctx) {
       ctx.shadowColor = col;
