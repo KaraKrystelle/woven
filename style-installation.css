@@ -98,6 +98,14 @@ body {
   margin: 0;
 }
 
+.tablet-version {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
 .tablet-main {
   max-width: 560px;
   margin: 0 auto;
@@ -125,6 +133,7 @@ body {
 
 .tablet-node {
   appearance: none;
+  -webkit-appearance: none;
   border: 2px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -133,7 +142,9 @@ body {
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
+  outline: none;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  touch-action: manipulation;
 }
 
 .tablet-node:hover {
@@ -145,6 +156,14 @@ body {
   border-color: var(--accent);
   background: rgba(196, 155, 255, 0.12);
   box-shadow: 0 0 0 1px rgba(196, 155, 255, 0.2);
+}
+
+.tablet-node--on:hover,
+.tablet-node--on:focus,
+.tablet-node--on:active {
+  border-color: var(--accent);
+  background: rgba(196, 155, 255, 0.22);
+  box-shadow: 0 0 0 1px rgba(196, 155, 255, 0.28);
 }
 
 .tablet-hint {

@@ -10,7 +10,7 @@ import {
   loadConfig,
   DEFAULT_OPTIONS,
   threadColorFromCountryEthnicCombo,
-  subscribeInstallation,
+  subscribeConfig,
 } from './state.js';
 
 const PARTICIPANT_KEYS = [
@@ -25,6 +25,15 @@ const ids = {
   reset: 'reset',
   submit: 'submit',
   openProjector: 'openProjector',
+  version: 'tablet-version',
+};
+const TABLET_VERSION = 'v2026.04.28.1';
+
+let draftSelections = {
+  countries: [],
+  ethnicBackgrounds: [],
+  goodExperiences: [],
+  badExperiences: [],
 };
 
 function $(id) {
@@ -64,15 +73,12 @@ function renderParticipantCategories(container, config, selected) {
 }
 
 function collectParticipantSelections() {
-  const container = $(ids.participantCategories);
-  const out = { countries: [], ethnicBackgrounds: [], goodExperiences: [], badExperiences: [] };
-  if (!container) return out;
-  container.querySelectorAll('.tablet-node--on[data-category][data-option]').forEach((el) => {
-    const cat = el.dataset.category;
-    const opt = el.dataset.option;
-    if (cat && out[cat] && opt) out[cat].push(opt);
-  });
-  return out;
+  return {
+    countries: [...(draftSelections.countries || [])],
+    ethnicBackgrounds: [...(draftSelections.ethnicBackgrounds || [])],
+    goodExperiences: [...(draftSelections.goodExperiences || [])],
+    badExperiences: [...(draftSelections.badExperiences || [])],
+  };
 }
 
 function collectOptions() {
@@ -87,24 +93,50 @@ function collectOptions() {
 
 function applyOptions(opts) {
   const o = { ...DEFAULT_OPTIONS, ...opts };
+  draftSelections = {
+    countries: [...(o.participantSelections?.countries || [])],
+    ethnicBackgrounds: [...(o.participantSelections?.ethnicBackgrounds || [])],
+    goodExperiences: [...(o.participantSelections?.goodExperiences || [])],
+    badExperiences: [...(o.participantSelections?.badExperiences || [])],
+  };
   const config = loadConfig();
   const partContainer = $(ids.participantCategories);
-  if (partContainer) renderParticipantCategories(partContainer, config, o.participantSelections);
-}
-
-function persist() {
-  saveOptions(collectOptions()).catch(() => {});
+  if (partContainer) renderParticipantCategories(partContainer, config, draftSelections);
 }
 
 function setupListeners() {
-  const delegate = (e) => {
-    const btn = e.target.closest('.tablet-node');
+  const toggleButton = (btn) => {
     if (!btn) return;
-    btn.classList.toggle('tablet-node--on');
-    btn.setAttribute('aria-pressed', btn.classList.contains('tablet-node--on'));
-    persist();
+    const cat = btn.dataset.category;
+    const opt = btn.dataset.option;
+    if (!cat || !opt || !draftSelections[cat]) return;
+    const list = draftSelections[cat];
+    const idx = list.indexOf(opt);
+    if (idx >= 0) list.splice(idx, 1);
+    else list.push(opt);
+    const isOn = idx < 0;
+    btn.classList.toggle('tablet-node--on', isOn);
+    btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+    btn.blur();
   };
-  $(ids.participantCategories)?.addEventListener('click', delegate);
+  const container = $(ids.participantCategories);
+  container?.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+    const target = e.target instanceof Element ? e.target : null;
+    const btn = target?.closest('.tablet-node');
+    if (!btn) return;
+    toggleButton(btn);
+    e.preventDefault();
+  });
+  container?.addEventListener('click', (e) => {
+    const target = e.target instanceof Element ? e.target : null;
+    const btn = target?.closest('.tablet-node');
+    if (!btn) return;
+    if (e.detail === 0) {
+      // Keyboard activation (Enter/Space) still toggles.
+      toggleButton(btn);
+    }
+  });
 
   const reset = $(ids.reset);
   if (reset) {
@@ -121,7 +153,7 @@ function setupListeners() {
   if (submit) {
     submit.addEventListener('click', () => {
       const opts = loadOptions();
-      const sel = opts.participantSelections || DEFAULT_OPTIONS.participantSelections;
+      const sel = collectParticipantSelections();
       const hasCountry = (sel.countries || []).length > 0;
       const hasEthnicity = (sel.ethnicBackgrounds || []).length > 0;
       if (hasCountry && hasEthnicity) {
@@ -137,6 +169,7 @@ function setupListeners() {
           submittedThreads: submitted,
           participantSelections: DEFAULT_OPTIONS.participantSelections,
           threadColor: DEFAULT_OPTIONS.threadColor,
+          selectedNodes: [],
         }).catch(() => {});
         applyOptions(loadOptions());
       }
@@ -146,10 +179,12 @@ function setupListeners() {
 
 async function init() {
   await initState();
+  const v = $(ids.version);
+  if (v) v.textContent = `Version ${TABLET_VERSION}`;
   const opts = loadOptions();
   applyOptions(opts);
   setupListeners();
-  subscribeInstallation(() => {
+  subscribeConfig(() => {
     applyOptions(loadOptions());
   });
 }
