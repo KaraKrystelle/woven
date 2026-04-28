@@ -13,21 +13,20 @@ import {
   subscribeConfig,
 } from './state.js';
 
-const PARTICIPANT_KEYS = [
-  { key: 'countries', label: 'Countries where you are from' },
-  { key: 'ethnicBackgrounds', label: 'Your Ethnic Background' },
-  { key: 'goodExperiences', label: 'Good Experiences' },
-  { key: 'badExperiences', label: 'Bad Experiences' },
-];
-
 const ids = {
-  participantCategories: 'participant-categories',
-  reset: 'reset',
-  submit: 'submit',
-  openProjector: 'openProjector',
+  page: 'tablet-page',
   version: 'tablet-version',
 };
-const TABLET_VERSION = 'v2026.04.28.2';
+const TABLET_VERSION = 'v2026.04.28.3';
+const LOOK_UP_MS = 5000;
+const PAGES = [
+  { type: 'start', title: 'Start' },
+  { type: 'choices', key: 'countries', title: 'Country' },
+  { type: 'choices', key: 'ethnicBackgrounds', title: 'Ethnic background' },
+  { type: 'choices', key: 'goodExperiences', title: 'Good experiences' },
+  { type: 'choices', key: 'badExperiences', title: 'Bad experiences', submit: true },
+  { type: 'lookUp', title: 'Look Up' },
+];
 
 let draftSelections = {
   countries: [],
@@ -35,41 +34,44 @@ let draftSelections = {
   goodExperiences: [],
   badExperiences: [],
 };
+let pageIndex = 0;
+let lookUpTimer = null;
 
 function $(id) {
   return document.getElementById(id);
 }
 
-function renderParticipantCategories(container, config, selected) {
+function resetDraftSelections() {
+  draftSelections = {
+    countries: [],
+    ethnicBackgrounds: [],
+    goodExperiences: [],
+    badExperiences: [],
+  };
+}
+
+function createActionButton(label, variant = 'primary') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `tablet-btn tablet-btn--${variant}`;
+  btn.textContent = label;
+  return btn;
+}
+
+function renderChoiceButtons(container, category, options) {
   if (!container) return;
   container.innerHTML = '';
-  const sel = selected || DEFAULT_OPTIONS.participantSelections;
-  for (const { key, label } of PARTICIPANT_KEYS) {
-    const options = config[key] || [];
-    if (options.length === 0) continue;
-    const set = new Set(sel[key] || []);
-    const section = document.createElement('div');
-    section.className = 'tablet-participant-section';
-    const title = document.createElement('h3');
-    title.className = 'tablet-participant-title';
-    title.textContent = label;
-    section.appendChild(title);
-    const wrap = document.createElement('div');
-    wrap.className = 'tablet-nodes';
-    wrap.setAttribute('data-category', key);
-    options.forEach((opt) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'tablet-node' + (set.has(opt) ? ' tablet-node--on' : '');
-      btn.textContent = opt;
-      btn.dataset.category = key;
-      btn.dataset.option = opt;
-      btn.setAttribute('aria-pressed', set.has(opt));
-      wrap.appendChild(btn);
-    });
-    section.appendChild(wrap);
-    container.appendChild(section);
-  }
+  const set = new Set(draftSelections[category] || []);
+  options.forEach((opt) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tablet-node' + (set.has(opt) ? ' tablet-node--on' : '');
+    btn.textContent = opt;
+    btn.dataset.category = category;
+    btn.dataset.option = opt;
+    btn.setAttribute('aria-pressed', set.has(opt) ? 'true' : 'false');
+    container.appendChild(btn);
+  });
 }
 
 function collectParticipantSelections() {
@@ -81,27 +83,63 @@ function collectParticipantSelections() {
   };
 }
 
-function collectOptions() {
-  const sel = collectParticipantSelections();
-  const comboColor = threadColorFromCountryEthnicCombo(sel, loadConfig());
-  return {
-    participantSelections: sel,
-    selectedNodes: [],
-    threadColor: comboColor ?? DEFAULT_OPTIONS.threadColor,
-  };
-}
-
-function applyOptions(opts) {
-  const o = { ...DEFAULT_OPTIONS, ...opts };
-  draftSelections = {
-    countries: [...(o.participantSelections?.countries || [])],
-    ethnicBackgrounds: [...(o.participantSelections?.ethnicBackgrounds || [])],
-    goodExperiences: [...(o.participantSelections?.goodExperiences || [])],
-    badExperiences: [...(o.participantSelections?.badExperiences || [])],
-  };
+function renderPage() {
+  const root = $(ids.page);
+  if (!root) return;
+  const page = PAGES[pageIndex] || PAGES[0];
   const config = loadConfig();
-  const partContainer = $(ids.participantCategories);
-  if (partContainer) renderParticipantCategories(partContainer, config, draftSelections);
+  root.innerHTML = '';
+
+  const section = document.createElement('section');
+  section.className = `tablet-page-card tablet-page-card--${page.type}`;
+
+  if (page.type === 'start') {
+    const begin = createActionButton('Begin');
+    begin.classList.add('tablet-btn--hero');
+    begin.addEventListener('click', () => {
+      resetDraftSelections();
+      pageIndex = 1;
+      renderPage();
+    });
+    section.appendChild(begin);
+    root.appendChild(section);
+    return;
+  }
+
+  if (page.type === 'lookUp') {
+    const title = document.createElement('h2');
+    title.className = 'tablet-look-up';
+    title.textContent = 'Look Up';
+    const message = document.createElement('p');
+    message.className = 'tablet-look-up-message';
+    message.textContent = 'Your thread is now appearing on the projector.';
+    section.append(title, message);
+    root.appendChild(section);
+    return;
+  }
+
+  const title = document.createElement('h2');
+  title.className = 'tablet-page-title';
+  title.textContent = page.title;
+  const hint = document.createElement('p');
+  hint.className = 'tablet-page-hint';
+  hint.textContent = 'Tap one or more options.';
+  const nodes = document.createElement('div');
+  nodes.className = 'tablet-nodes tablet-page-nodes';
+  renderChoiceButtons(nodes, page.key, config[page.key] || []);
+  const actions = document.createElement('div');
+  actions.className = 'tablet-actions';
+  const next = createActionButton(page.submit ? 'Submit' : 'Continue');
+  next.addEventListener('click', () => {
+    if (page.submit) submitSelections();
+    else {
+      pageIndex += 1;
+      renderPage();
+    }
+  });
+  actions.appendChild(next);
+  section.append(title, hint, nodes, actions);
+  root.appendChild(section);
 }
 
 function setupListeners() {
@@ -129,7 +167,7 @@ function setupListeners() {
     btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
     btn.blur();
   };
-  const container = $(ids.participantCategories);
+  const container = $(ids.page);
   if (window.PointerEvent) {
     container?.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
@@ -162,55 +200,46 @@ function setupListeners() {
     // Mouse clicks and keyboard activation (Enter/Space) toggle here.
     toggleButton(btn);
   });
+}
 
-  const reset = $(ids.reset);
-  if (reset) {
-    reset.addEventListener('click', () => {
-      saveOptions({
-        participantSelections: DEFAULT_OPTIONS.participantSelections,
-        threadColor: DEFAULT_OPTIONS.threadColor,
-      }).catch(() => {});
-      applyOptions(loadOptions());
-    });
-  }
+function submitSelections() {
+  const opts = loadOptions();
+  const sel = collectParticipantSelections();
+  const savedColor =
+    threadColorFromCountryEthnicCombo(sel, loadConfig()) ??
+    opts.threadColor ??
+    DEFAULT_OPTIONS.threadColor;
+  const submitted = [
+    ...(opts.submittedThreads || []),
+    { participantSelections: { ...sel }, threadColor: savedColor },
+  ];
 
-  const submit = $(ids.submit);
-  if (submit) {
-    submit.addEventListener('click', () => {
-      const opts = loadOptions();
-      const sel = collectParticipantSelections();
-      const hasCountry = (sel.countries || []).length > 0;
-      const hasEthnicity = (sel.ethnicBackgrounds || []).length > 0;
-      if (hasCountry && hasEthnicity) {
-        const savedColor =
-          threadColorFromCountryEthnicCombo(sel, loadConfig()) ??
-          opts.threadColor ??
-          DEFAULT_OPTIONS.threadColor;
-        const submitted = [
-          ...(opts.submittedThreads || []),
-          { participantSelections: { ...sel }, threadColor: savedColor },
-        ];
-        saveOptions({
-          submittedThreads: submitted,
-          participantSelections: DEFAULT_OPTIONS.participantSelections,
-          threadColor: DEFAULT_OPTIONS.threadColor,
-          selectedNodes: [],
-        }).catch(() => {});
-        applyOptions(loadOptions());
-      }
-    });
-  }
+  saveOptions({
+    submittedThreads: submitted,
+    participantSelections: DEFAULT_OPTIONS.participantSelections,
+    threadColor: DEFAULT_OPTIONS.threadColor,
+    selectedNodes: [],
+  }).catch(() => {});
+
+  resetDraftSelections();
+  pageIndex = 5;
+  renderPage();
+  if (lookUpTimer) clearTimeout(lookUpTimer);
+  lookUpTimer = setTimeout(() => {
+    pageIndex = 0;
+    renderPage();
+  }, LOOK_UP_MS);
 }
 
 async function init() {
   await initState();
   const v = $(ids.version);
   if (v) v.textContent = `Version ${TABLET_VERSION}`;
-  const opts = loadOptions();
-  applyOptions(opts);
+  resetDraftSelections();
+  renderPage();
   setupListeners();
   subscribeConfig(() => {
-    applyOptions(loadOptions());
+    renderPage();
   });
 }
 
