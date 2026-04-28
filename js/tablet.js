@@ -132,10 +132,8 @@ function setupListeners() {
     const target = e.target instanceof Element ? e.target : null;
     const btn = target?.closest('.tablet-node');
     if (!btn) return;
-    if (e.detail === 0) {
-      // Keyboard activation (Enter/Space) still toggles.
-      toggleButton(btn);
-    }
+    // Mouse clicks and keyboard activation (Enter/Space) toggle here.
+    toggleButton(btn);
   });
 
   const reset = $(ids.reset);

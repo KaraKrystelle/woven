@@ -83,7 +83,8 @@ function renderRow(entry, countries, ethnicBackgrounds) {
   };
   countrySel.addEventListener('change', onChange);
   ethnicSel.addEventListener('change', onChange);
-  colorIn.addEventListener('input', onChange);
+  // Save only after the picker is dismissed so the native color UI stays open while selecting.
+  colorIn.addEventListener('change', onChange);
   remove.addEventListener('click', () => {
     row.remove();
     persist();
