@@ -5,8 +5,11 @@
 import {
   initState,
   loadConfig,
+  loadOptions,
+  saveOptions,
   saveConfig,
   DEFAULT_CONFIG,
+  DEFAULT_OPTIONS,
   buildInstallationBackup,
   applyInstallationBackup,
   subscribeConfig,
@@ -22,6 +25,8 @@ const VISUAL_IDS = [
   'animation',
   'animationSpeed',
 ];
+
+const THREADS_BACKUP_VERSION = 1;
 
 function $(id) {
   return document.getElementById(id);
@@ -109,6 +114,29 @@ function renderFromConfig(config) {
   });
 }
 
+function buildThreadsBackup() {
+  const opts = loadOptions();
+  return {
+    version: THREADS_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    app: 'woven',
+    type: 'projector-threads',
+    submittedThreads: opts.submittedThreads || [],
+  };
+}
+
+function parseThreadsBackup(data) {
+  if (!data || typeof data !== 'object') throw new Error('Invalid file: expected a JSON object.');
+  const d = /** @type {Record<string, unknown>} */ (data);
+  if (d.version !== undefined && d.version !== THREADS_BACKUP_VERSION) {
+    throw new Error(`Unsupported threads backup version: ${d.version}`);
+  }
+  if (!Array.isArray(d.submittedThreads)) {
+    throw new Error('Invalid threads backup: expected "submittedThreads" array.');
+  }
+  return d.submittedThreads;
+}
+
 async function init() {
   await initState();
   const config = loadConfig();
@@ -133,6 +161,71 @@ async function init() {
         doAdd();
       }
     });
+  });
+
+  const clearStatusEl = $('clearThreadsStatus');
+  const setClearStatus = (msg) => {
+    if (clearStatusEl) clearStatusEl.textContent = msg || '';
+  };
+
+  $('clearThreads')?.addEventListener('click', async () => {
+    if (!confirm('Clear all submitted threads from the projector?')) return;
+    try {
+      const opts = loadOptions();
+      await saveOptions({
+        ...opts,
+        selectedNodes: [],
+        participantSelections: DEFAULT_OPTIONS.participantSelections,
+        submittedThreads: [],
+        threadColor: DEFAULT_OPTIONS.threadColor,
+      });
+      setClearStatus('Projector threads cleared.');
+    } catch (err) {
+      setClearStatus(`Clear failed: ${err?.message || err}`);
+    }
+  });
+
+  $('exportThreads')?.addEventListener('click', () => {
+    try {
+      const payload = buildThreadsBackup();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `woven-threads-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setClearStatus('Threads export downloaded.');
+    } catch (err) {
+      setClearStatus(`Threads export failed: ${err?.message || err}`);
+    }
+  });
+
+  $('importThreads')?.addEventListener('change', async (e) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    setClearStatus('');
+    try {
+      const text = await file.text();
+      const submittedThreads = parseThreadsBackup(JSON.parse(text));
+      if (!confirm('Replace the projector threads with this file? Current threads will be cleared.')) {
+        input.value = '';
+        return;
+      }
+      await saveOptions({
+        ...loadOptions(),
+        selectedNodes: [],
+        participantSelections: DEFAULT_OPTIONS.participantSelections,
+        submittedThreads,
+        threadColor: DEFAULT_OPTIONS.threadColor,
+      });
+      setClearStatus('Threads import complete.');
+      input.value = '';
+    } catch (err) {
+      setClearStatus(`Threads import failed: ${err?.message || err}`);
+      input.value = '';
+    }
   });
 
   const statusEl = $('backupStatus');
