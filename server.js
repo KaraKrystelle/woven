@@ -4,6 +4,8 @@ const path = require('path');
 const { URL } = require('url');
 
 const PORT = Number(process.env.PORT || 3333);
+/** Bind all IPv4 interfaces so tablets/projectors on the LAN can connect. Override with HOST=127.0.0.1 */
+const HOST = process.env.HOST || '0.0.0.0';
 const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'state.json');
@@ -51,6 +53,19 @@ const MIME_TYPES = {
 
 let installationState = loadStateFromDisk();
 const clients = new Set();
+
+/** Keeps some proxies/browsers from dropping idle SSE connections. */
+const SSE_PING_MS = 25_000;
+setInterval(() => {
+  if (clients.size === 0) return;
+  for (const client of clients) {
+    try {
+      client.write(': ping\n\n');
+    } catch (_) {
+      clients.delete(client);
+    }
+  }
+}, SSE_PING_MS);
 
 function mergeState(raw) {
   return {
@@ -208,6 +223,10 @@ const server = http.createServer(async (req, res) => {
   serveStatic(req, res);
 });
 
-server.listen(PORT, () => {
-  console.log(`woven server running on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  const where =
+    HOST === '0.0.0.0'
+      ? `http://0.0.0.0:${PORT} (all interfaces — use this machine’s LAN IP from other devices)`
+      : `http://${HOST}:${PORT}`;
+  console.log(`woven server listening on ${where}`);
 });

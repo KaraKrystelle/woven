@@ -1,6 +1,6 @@
 /**
  * P5.js sketch: digital threads from participant choices.
- * Nodes from config: countries (left arc), ethnicities (right arc), experiences (inside).
+ * Nodes from config: countries (left arc), ethnicities (right arc), experiences (inner disk, spread by relaxation).
  * Threads animate in slowly; labels fade in/out briefly as thread passes each node.
  */
 
@@ -28,9 +28,120 @@ const THREAD_GROW_SPEED = 0.007;
 const LABEL_FADE_SPAN = 0.2;
 const LABEL_FONT_SIZE = 12;
 const LABEL_OFFSET = 14;
+const MAP_EDGE_HIT_PX = 14;
+/** Square layout resolution; mapping scales this uniformly into the projection rect. */
+const DESIGN_LAYOUT_SIZE = 1000;
+const MAPPING_STORAGE_KEY = 'woven-projector-mapping';
 
 function dist(a, b) {
   return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+/** Deterministic [0, 1) from string + salt (FNV-1a style). */
+function hash01(str, salt) {
+  let h = 2166136261 >>> 0;
+  const key = `${salt}\0${str}`;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h / 2 ** 32;
+}
+
+/** Uniform random point in disk radius R centered at (cx, cy); stable per id. */
+function diskPositionFromId(id, cx, cy, rDisk) {
+  const u = hash01(id, 'θ');
+  const v = hash01(id, 'ρ');
+  const theta = u * Math.PI * 2;
+  const rad = rDisk * Math.sqrt(v);
+  return {
+    x: cx + rad * Math.cos(theta),
+    y: cy + rad * Math.sin(theta),
+  };
+}
+
+function clampToDisk(x, y, cx, cy, rMax) {
+  const dx = x - cx;
+  const dy = y - cy;
+  const d = Math.hypot(dx, dy);
+  if (d <= rMax || d < 1e-12) return { x, y };
+  const s = rMax / d;
+  return { x: cx + dx * s, y: cy + dy * s };
+}
+
+const EXPERIENCE_RELAX_ITERATIONS = 84;
+
+/**
+ * Spread experience nodes in the inner disk: seed from hash, then deterministic repulsion.
+ * @param {{ id: string }[]} experienceNodes
+ * @returns {Map<string, { x: number, y: number }>}
+ */
+function relaxExperienceDiskPositions(experienceNodes, cx, cy, rInner) {
+  const ids = [...new Set(experienceNodes.map((n) => n.id))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  /** @type {Map<string, { x: number, y: number }>} */
+  const pos = new Map();
+  for (const id of ids) {
+    pos.set(id, diskPositionFromId(id, cx, cy, rInner));
+  }
+
+  const k = ids.length;
+  if (k <= 1) return pos;
+
+  const meanChord = (Math.sqrt(Math.PI) * rInner) / Math.sqrt(k);
+  const restDist = Math.min(rInner * 0.38, meanChord * 1.05);
+  const influence = restDist * 2.85;
+
+  for (let iter = 0; iter < EXPERIENCE_RELAX_ITERATIONS; iter++) {
+    const phase = iter / Math.max(EXPERIENCE_RELAX_ITERATIONS - 1, 1);
+    const damp = 0.75 * (1 - phase) + 0.28 * phase;
+
+    /** @type {Map<string, { x: number, y: number }>} */
+    const next = new Map();
+
+    for (const id of ids) {
+      const p = /** @type {{ x: number, y: number }} */ (pos.get(id));
+      let fx = 0;
+      let fy = 0;
+
+      for (const jid of ids) {
+        if (jid === id) continue;
+        const q = /** @type {{ x: number, y: number }} */ (pos.get(jid));
+        let dx = p.x - q.x;
+        let dy = p.y - q.y;
+        let d = Math.hypot(dx, dy);
+
+        if (d < 1e-10) {
+          const sx = (hash01(id, '|split') - 0.5) * 2;
+          const sy = (hash01(jid, '|split') - 0.5) * 2;
+          dx = sx || 1e-6;
+          dy = sy || 1e-6;
+          d = Math.hypot(dx, dy);
+        }
+
+        if (d >= influence) continue;
+
+        let nx = dx / d;
+        let ny = dy / d;
+
+        const overlap = Math.max(0, restDist - d);
+        const soft = Math.max(0, influence - d) / influence;
+        const mag = (overlap / restDist) ** 2 + soft ** 3 * 0.45;
+
+        fx += nx * mag;
+        fy += ny * mag;
+      }
+
+      const step = rInner * 0.11 * damp;
+      let x2 = p.x + fx * step;
+      let y2 = p.y + fy * step;
+      const clamped = clampToDisk(x2, y2, cx, cy, rInner * 0.998);
+      next.set(id, clamped);
+    }
+
+    for (const id of ids) pos.set(id, /** @type {{ x: number, y: number }} */ (next.get(id)));
+  }
+
+  return pos;
 }
 
 /** One path per person: country → experiences (nearest order) → ethnicity. No loops. */
@@ -109,11 +220,17 @@ function buildNodesFromConfig(config) {
   return nodes;
 }
 
-function getNodePositions(p, nodes, w, h) {
+/** Layout in abstract square [0,w]×[0,h] — same proportions as full-screen layout. */
+function getNodePositionsLayoutSpace(nodes, w, h) {
   const cx = w / 2;
   const cy = h / 2;
   const rOuter = Math.min(cx, cy) * 0.42;
   const rInner = Math.min(cx, cy) * 0.28;
+
+  const experienceNodes = nodes.filter(
+    (n) => n.group === 'goodExperiences' || n.group === 'badExperiences'
+  );
+  const relaxedDisk = relaxExperienceDiskPositions(experienceNodes, cx, cy, rInner);
 
   return nodes.map((n) => {
     let angle, r;
@@ -125,19 +242,140 @@ function getNodePositions(p, nodes, w, h) {
       const t = n.total > 1 ? n.index / (n.total - 1) : 0.5;
       angle = 0.75 + t * 0.5;
       r = rOuter;
-    } else if (n.group === 'goodExperiences') {
-      const t = n.total > 1 ? n.index / (n.total - 1) : 0.5;
-      angle = 0.35 + t * 0.2;
-      r = rInner;
     } else {
-      const t = n.total > 1 ? n.index / (n.total - 1) : 0.5;
-      angle = 0.55 + t * 0.2;
-      r = rInner;
+      const p = relaxedDisk.get(n.id);
+      const { x, y } = p || diskPositionFromId(n.id, cx, cy, rInner);
+      return { ...n, x, y };
     }
     const x = cx + r * Math.cos(angle * Math.PI * 2);
     const y = cy + r * Math.sin(angle * Math.PI * 2);
     return { ...n, x, y };
   });
+}
+
+function layoutBounds(layoutNodes, fallbackW, fallbackH) {
+  if (!layoutNodes.length) {
+    const fw = fallbackW ?? DESIGN_LAYOUT_SIZE;
+    const fh = fallbackH ?? DESIGN_LAYOUT_SIZE;
+    return { minX: 0, minY: 0, maxX: fw, maxY: fh };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const n of layoutNodes) {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x);
+    maxY = Math.max(maxY, n.y);
+  }
+  const span = Math.max(maxX - minX, maxY - minY, 1e-6);
+  const pad = span * 0.08;
+  return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
+}
+
+/** Map layout-space nodes into pixel rect (pw, ph) using uniform scale (geometry preserved). */
+function mapLayoutToPixels(layoutNodes, bounds, pw, ph, px0, py0) {
+  const bw = bounds.maxX - bounds.minX || 1;
+  const bh = bounds.maxY - bounds.minY || 1;
+  const scale = Math.min(pw / bw, ph / bh);
+  const ox = px0 + (pw - scale * bw) / 2 - scale * bounds.minX;
+  const oy = py0 + (ph - scale * bh) / 2 - scale * bounds.minY;
+  return layoutNodes.map((n) => ({
+    ...n,
+    x: ox + scale * n.x,
+    y: oy + scale * n.y,
+  }));
+}
+
+function clampMapping(m, minSpan = 0.05) {
+  let l = Math.max(0, Math.min(1, m.l));
+  let t = Math.max(0, Math.min(1, m.t));
+  let r = Math.max(0, Math.min(1, m.r));
+  let b = Math.max(0, Math.min(1, m.b));
+  if (r <= l) r = Math.min(1, l + minSpan);
+  if (b <= t) b = Math.min(1, t + minSpan);
+  if (r - l < minSpan) {
+    const mid = (l + r) / 2;
+    l = Math.max(0, mid - minSpan / 2);
+    r = Math.min(1, l + minSpan);
+    l = Math.max(0, r - minSpan);
+  }
+  if (b - t < minSpan) {
+    const mid = (t + b) / 2;
+    t = Math.max(0, mid - minSpan / 2);
+    b = Math.min(1, t + minSpan);
+    t = Math.max(0, b - minSpan);
+  }
+  return { l, t, r, b };
+}
+
+function loadMappingRect() {
+  try {
+    const raw = localStorage.getItem(MAPPING_STORAGE_KEY);
+    if (!raw) return { l: 0, t: 0, r: 1, b: 1 };
+    const o = JSON.parse(raw);
+    return clampMapping({
+      l: Number(o.l) || 0,
+      t: Number(o.t) || 0,
+      r: o.r !== undefined && o.r !== null ? Number(o.r) : 1,
+      b: o.b !== undefined && o.b !== null ? Number(o.b) : 1,
+    });
+  } catch (_) {
+    return { l: 0, t: 0, r: 1, b: 1 };
+  }
+}
+
+function saveMappingRect(m) {
+  try {
+    localStorage.setItem(MAPPING_STORAGE_KEY, JSON.stringify(clampMapping(m)));
+  } catch (_) {}
+}
+
+function pixelRectFromMapping(p, mapNorm) {
+  const w = p.width;
+  const h = p.height;
+  return {
+    x: mapNorm.l * w,
+    y: mapNorm.t * h,
+    w: (mapNorm.r - mapNorm.l) * w,
+    h: (mapNorm.b - mapNorm.t) * h,
+  };
+}
+
+/** @returns {'left'|'right'|'top'|'bottom'|null} */
+function pickProjectionEdge(mx, my, pr, tol) {
+  const { x, y, w, h } = pr;
+  /** @type {Array<[string, number]>} */
+  const candidates = [];
+  const dL = Math.abs(mx - x);
+  if (dL <= tol && my >= y - tol && my <= y + h + tol) candidates.push(['left', dL]);
+  const dR = Math.abs(mx - (x + w));
+  if (dR <= tol && my >= y - tol && my <= y + h + tol) candidates.push(['right', dR]);
+  const dT = Math.abs(my - y);
+  if (dT <= tol && mx >= x - tol && mx <= x + w + tol) candidates.push(['top', dT]);
+  const dB = Math.abs(my - (y + h));
+  if (dB <= tol && mx >= x - tol && mx <= x + w + tol) candidates.push(['bottom', dB]);
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a[1] - b[1]);
+  return /** @type {'left'|'right'|'top'|'bottom'} */ (candidates[0][0]);
+}
+
+function drawMappingEditOverlay(p, pr) {
+  const W = p.width;
+  const H = p.height;
+  p.push();
+  p.fill(0, 0, 0, 110);
+  p.noStroke();
+  p.rect(0, 0, W, pr.y);
+  p.rect(0, pr.y + pr.h, W, Math.max(0, H - pr.y - pr.h));
+  p.rect(0, pr.y, pr.x, pr.h);
+  p.rect(pr.x + pr.w, pr.y, Math.max(0, W - pr.x - pr.w), pr.h);
+  p.noFill();
+  p.stroke(255);
+  p.strokeWeight(2);
+  p.rect(pr.x, pr.y, pr.w, pr.h);
+  p.pop();
 }
 
 function getSelectedIds(sel) {
@@ -170,6 +408,19 @@ export function createThreadSketch(containerId) {
   let completedLayer = null;
   let lastConfigSnapshot = JSON.stringify(config);
   let lastSubmittedSnapshot = JSON.stringify(options.submittedThreads || []);
+  let debugMode = false;
+  let mappingEditMode = false;
+  let mappingNorm = loadMappingRect();
+  /** Vertical center of projection area (for label placement). */
+  let projectionMidY = 0;
+  /** @type {'left'|'right'|'top'|'bottom'|null} */
+  let dragEdge = null;
+
+  function syncProjectorDebugChrome() {
+    document.body.classList.toggle('projector-debug', debugMode);
+    const help = document.querySelector('.projector-help');
+    if (help) help.setAttribute('aria-hidden', debugMode ? 'false' : 'true');
+  }
 
   function markLayerDirty() {
     layerDirty = true;
@@ -178,9 +429,13 @@ export function createThreadSketch(containerId) {
   function refreshNodes(p) {
     if (!nodesDirty) return;
     const raw = buildNodesFromConfig(config);
-    const w = p.width || p.windowWidth || 1920;
-    const h = p.height || p.windowHeight || 1080;
-    nodes = getNodePositions(p, raw, w, h);
+    const pr = pixelRectFromMapping(p, mappingNorm);
+    const lw = Math.max(1, pr.w);
+    const lh = Math.max(1, pr.h);
+    const layoutNodes = getNodePositionsLayoutSpace(raw, lw, lh);
+    const bounds = layoutBounds(layoutNodes, lw, lh);
+    nodes = mapLayoutToPixels(layoutNodes, bounds, pr.w, pr.h, pr.x, pr.y);
+    projectionMidY = pr.y + pr.h / 2;
     nodeById = new Map(nodes.map((n) => [n.id, n]));
     nodesVersion += 1;
     nodesDirty = false;
@@ -332,12 +587,12 @@ export function createThreadSketch(containerId) {
     if (ctx && vis.glow) ctx.shadowBlur = 0;
   }
 
-  function drawLabel(p, n, opacity) {
+  function drawLabel(p, n, opacity, midY) {
     if (opacity <= 0) return;
-    const cy = p.height / 2;
-    const ty = n.y < cy ? n.y + LABEL_OFFSET : n.y - LABEL_OFFSET;
+    const cyRef = midY ?? p.height / 2;
+    const ty = n.y < cyRef ? n.y + LABEL_OFFSET : n.y - LABEL_OFFSET;
     p.textSize(LABEL_FONT_SIZE);
-    p.textAlign(p.CENTER, n.y < cy ? p.TOP : p.BOTTOM);
+    p.textAlign(p.CENTER, n.y < cyRef ? p.TOP : p.BOTTOM);
     p.fill(255, 255, 255);
     p.drawingContext.globalAlpha = opacity;
     p.noStroke();
@@ -371,6 +626,7 @@ export function createThreadSketch(containerId) {
         if (configChanged) nodesDirty = true;
         if (configChanged || submittedChanged) markLayerDirty();
       });
+      syncProjectorDebugChrome();
     };
 
     p.draw = function () {
@@ -462,8 +718,57 @@ export function createThreadSketch(containerId) {
       for (const n of nodes) drawNode(p, n, selectedIds.has(n.id), threadColor);
       labelOpacity.forEach((opacity, nodeId) => {
         const n = nodes.find((nn) => nn.id === nodeId);
-        if (n) drawLabel(p, n, opacity);
+        if (n) drawLabel(p, n, opacity, projectionMidY);
       });
+
+      if (debugMode && mappingEditMode) {
+        drawMappingEditOverlay(p, pixelRectFromMapping(p, mappingNorm));
+      }
+      if (debugMode) {
+        p.push();
+        p.fill(200, 230, 255);
+        p.noStroke();
+        p.textAlign(p.LEFT, p.TOP);
+        p.textSize(13);
+        const mo = mappingNorm;
+        const lines = [
+          'Debug ON — D hide · F fullscreen',
+          `FPS ~${p.frameRate().toFixed(0)}`,
+          `Map L ${mo.l.toFixed(3)} T ${mo.t.toFixed(3)} R ${mo.r.toFixed(3)} B ${mo.b.toFixed(3)}`,
+          mappingEditMode ? 'Mapping edit ON — M off · drag edges' : 'M — mapping edit',
+        ];
+        let ly = 10;
+        for (const line of lines) {
+          p.text(line, 12, ly);
+          ly += 18;
+        }
+        p.pop();
+      }
+    };
+
+    p.mousePressed = function () {
+      if (!debugMode || !mappingEditMode) return;
+      const pr = pixelRectFromMapping(p, mappingNorm);
+      dragEdge = pickProjectionEdge(p.mouseX, p.mouseY, pr, MAP_EDGE_HIT_PX);
+    };
+
+    p.mouseReleased = function () {
+      if (dragEdge) saveMappingRect(mappingNorm);
+      dragEdge = null;
+    };
+
+    p.mouseDragged = function () {
+      if (!mappingEditMode || !dragEdge) return;
+      const dx = (p.mouseX - p.pmouseX) / p.width;
+      const dy = (p.mouseY - p.pmouseY) / p.height;
+      const m = { ...mappingNorm };
+      if (dragEdge === 'left') m.l += dx;
+      if (dragEdge === 'right') m.r += dx;
+      if (dragEdge === 'top') m.t += dy;
+      if (dragEdge === 'bottom') m.b += dy;
+      mappingNorm = clampMapping(m);
+      nodesDirty = true;
+      markLayerDirty();
     };
 
     p.windowResized = function () {
@@ -476,6 +781,20 @@ export function createThreadSketch(containerId) {
       if (p.key === 'f' || p.key === 'F') {
         if (!document.fullscreenElement) document.documentElement.requestFullscreen();
         else document.exitFullscreen();
+        return false;
+      }
+      if (p.key === 'd' || p.key === 'D') {
+        debugMode = !debugMode;
+        if (!debugMode) {
+          mappingEditMode = false;
+          dragEdge = null;
+        }
+        syncProjectorDebugChrome();
+        return false;
+      }
+      if ((p.key === 'm' || p.key === 'M') && debugMode) {
+        mappingEditMode = !mappingEditMode;
+        if (!mappingEditMode) dragEdge = null;
         return false;
       }
     };

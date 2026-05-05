@@ -47,6 +47,12 @@ const state = {
 let initPromise = null;
 let backendMode = false;
 let eventSource = null;
+/** Reconnect after SSE drops (proxies, sleep, flaky LAN). */
+let sseReconnectTimer = null;
+let sseReconnectAttempt = 0;
+/** Poll GET /api/state as fallback when SSE misses an update. */
+let statePollTimer = null;
+let backendSyncHooksInstalled = false;
 
 function mergeOptions(raw) {
   return { ...DEFAULT_OPTIONS, ...(raw || {}) };
@@ -104,9 +110,54 @@ function applyRemoteState(payload) {
   emitStateChange();
 }
 
-function ensureEventStream() {
-  if (!backendMode || eventSource || typeof EventSource === 'undefined') return;
-  eventSource = new EventSource('/api/events');
+function comparableInstallationPayload(payload) {
+  return JSON.stringify({
+    options: mergeOptions(payload?.options),
+    config: mergeConfig(payload?.config),
+  });
+}
+
+function comparableLocalInstallation() {
+  return JSON.stringify({
+    options: mergeOptions(state.options),
+    config: mergeConfig(state.config),
+  });
+}
+
+async function fetchAndApplyStateIfDrifted() {
+  if (!backendMode) return;
+  try {
+    const payload = await requestJson('/api/state');
+    if (comparableInstallationPayload(payload) !== comparableLocalInstallation()) {
+      applyRemoteState(payload);
+    }
+  } catch (_) {}
+}
+
+function scheduleSseReconnect() {
+  if (!backendMode || typeof EventSource === 'undefined') return;
+  if (sseReconnectTimer) return;
+  const exp = Math.min(5, sseReconnectAttempt);
+  const delay = Math.min(30_000, 400 + Math.random() * 600 + 900 * 2 ** exp);
+  sseReconnectTimer = setTimeout(() => {
+    sseReconnectTimer = null;
+    connectEventSource();
+  }, delay);
+  sseReconnectAttempt += 1;
+}
+
+function connectEventSource() {
+  if (!backendMode || typeof EventSource === 'undefined') return;
+  if (eventSource) return;
+  try {
+    eventSource = new EventSource('/api/events');
+  } catch (_) {
+    scheduleSseReconnect();
+    return;
+  }
+  eventSource.onopen = () => {
+    sseReconnectAttempt = 0;
+  };
   eventSource.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
@@ -114,9 +165,29 @@ function ensureEventStream() {
     } catch (_) {}
   };
   eventSource.onerror = () => {
-    eventSource?.close();
+    try {
+      eventSource?.close();
+    } catch (_) {}
     eventSource = null;
+    scheduleSseReconnect();
   };
+}
+
+function installBackendSyncHooksOnce() {
+  if (!backendMode || backendSyncHooksInstalled) return;
+  backendSyncHooksInstalled = true;
+  const pollMs = 7000;
+  statePollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') fetchAndApplyStateIfDrifted();
+  }, pollMs);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && backendMode) fetchAndApplyStateIfDrifted();
+  });
+}
+
+function ensureEventStream() {
+  connectEventSource();
+  installBackendSyncHooksOnce();
 }
 
 export async function initState() {

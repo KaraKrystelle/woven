@@ -48,10 +48,14 @@ body {
   height: 100% !important;
 }
 
-.projector-help {
+.projector-body .projector-help {
   position: fixed;
   right: 16px;
   bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
   padding: 8px 12px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -59,6 +63,16 @@ body {
   font-size: 12px;
   color: var(--muted);
   z-index: 10;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s;
+}
+
+.projector-body.projector-debug .projector-help {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .projector-help kbd {
@@ -321,9 +335,19 @@ body {
 }
 
 .tablet-btn--hero {
+  flex: none;
+  box-sizing: border-box;
   width: 100%;
-  min-height: 160px;
-  font-size: clamp(2rem, 9vw, 3.5rem);
+  height: 66vh;
+  max-height: 66vh;
+  padding: 96px 24px;
+  border-color: var(--accent);
+  background: rgba(196, 155, 255, 0.15);
+  font-size: clamp(1.45rem, 5.5vw, 2.35rem);
+}
+
+.tablet-btn--hero:hover {
+  background: rgba(196, 155, 255, 0.25);
 }
 
 .tablet-btn--primary:hover {

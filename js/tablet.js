@@ -17,8 +17,10 @@ const ids = {
   page: 'tablet-page',
   version: 'tablet-version',
 };
-const TABLET_VERSION = 'v2026.04.28.3';
+const TABLET_VERSION = 'v2026.05.06.1';
 const LOOK_UP_MS = 5000;
+/** One selection at a time (tap again to clear). Experiences stay multi-select. */
+const SINGLE_SELECT_KEYS = new Set(['countries', 'ethnicBackgrounds']);
 const PAGES = [
   { type: 'start', title: 'Start' },
   { type: 'choices', key: 'countries', title: 'Country' },
@@ -94,7 +96,7 @@ function renderPage() {
   section.className = `tablet-page-card tablet-page-card--${page.type}`;
 
   if (page.type === 'start') {
-    const begin = createActionButton('Begin');
+    const begin = createActionButton('Begin', 'secondary');
     begin.classList.add('tablet-btn--hero');
     begin.addEventListener('click', () => {
       resetDraftSelections();
@@ -123,7 +125,10 @@ function renderPage() {
   title.textContent = page.title;
   const hint = document.createElement('p');
   hint.className = 'tablet-page-hint';
-  hint.textContent = 'Tap one or more options.';
+  hint.textContent =
+    page.key && SINGLE_SELECT_KEYS.has(page.key)
+      ? 'Tap one option (tap again to clear).'
+      : 'Tap one or more options.';
   const nodes = document.createElement('div');
   nodes.className = 'tablet-nodes tablet-page-nodes';
   renderChoiceButtons(nodes, page.key, config[page.key] || []);
@@ -159,6 +164,27 @@ function setupListeners() {
     const opt = btn.dataset.option;
     if (!cat || !opt || !draftSelections[cat]) return;
     const list = draftSelections[cat];
+
+    if (SINGLE_SELECT_KEYS.has(cat)) {
+      const idx = list.indexOf(opt);
+      if (idx >= 0) list.splice(idx, 1);
+      else {
+        list.length = 0;
+        list.push(opt);
+      }
+      const wrap = btn.closest('.tablet-nodes');
+      if (wrap) {
+        wrap.querySelectorAll('.tablet-node').forEach((b) => {
+          const o = b.dataset.option;
+          const on = list.indexOf(o) >= 0;
+          b.classList.toggle('tablet-node--on', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      }
+      btn.blur();
+      return;
+    }
+
     const idx = list.indexOf(opt);
     if (idx >= 0) list.splice(idx, 1);
     else list.push(opt);
