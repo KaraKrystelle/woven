@@ -28,7 +28,8 @@ const THREAD_GROW_SPEED = 0.007;
 const LABEL_FADE_SPAN = 0.2;
 const LABEL_FONT_SIZE = 12;
 const LABEL_OFFSET = 14;
-const MAP_EDGE_HIT_PX = 14;
+const MAP_EDGE_HIT_PX = 30;
+const MAP_EDGE_STROKE = 6;
 /** Square layout resolution; mapping scales this uniformly into the projection rect. */
 const DESIGN_LAYOUT_SIZE = 1000;
 const MAPPING_STORAGE_KEY = 'woven-projector-mapping';
@@ -373,7 +374,7 @@ function drawMappingEditOverlay(p, pr) {
   p.rect(pr.x + pr.w, pr.y, Math.max(0, W - pr.x - pr.w), pr.h);
   p.noFill();
   p.stroke(255);
-  p.strokeWeight(2);
+  p.strokeWeight(MAP_EDGE_STROKE);
   p.rect(pr.x, pr.y, pr.w, pr.h);
   p.pop();
 }
