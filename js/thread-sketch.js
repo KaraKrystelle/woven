@@ -427,6 +427,18 @@ export function createThreadSketch(containerId) {
     layerDirty = true;
   }
 
+  /** Full visual refresh after mapping rectangle changes (paths + raster cache use node coords). */
+  function invalidateAfterMappingEdit() {
+    nodesDirty = true;
+    layerDirty = true;
+    submittedCache.length = 0;
+    pathProgress = 0;
+    lastPathKey = '';
+    if (completedLayer) {
+      completedLayer.clear();
+    }
+  }
+
   function refreshNodes(p) {
     if (!nodesDirty) return;
     const raw = buildNodesFromConfig(config);
@@ -754,8 +766,10 @@ export function createThreadSketch(containerId) {
     };
 
     p.mouseReleased = function () {
+      const hadDrag = !!dragEdge;
       if (dragEdge) saveMappingRect(mappingNorm);
       dragEdge = null;
+      if (hadDrag) invalidateAfterMappingEdit();
     };
 
     p.mouseDragged = function () {
@@ -794,8 +808,10 @@ export function createThreadSketch(containerId) {
         return false;
       }
       if ((p.key === 'm' || p.key === 'M') && debugMode) {
+        const wasEditing = mappingEditMode;
         mappingEditMode = !mappingEditMode;
         if (!mappingEditMode) dragEdge = null;
+        if (wasEditing && !mappingEditMode) invalidateAfterMappingEdit();
         return false;
       }
       if (debugMode && mappingEditMode) {
@@ -814,8 +830,7 @@ export function createThreadSketch(containerId) {
           m.t += dv * stepY;
           m.b += dv * stepY;
           mappingNorm = clampMapping(m);
-          nodesDirty = true;
-          markLayerDirty();
+          invalidateAfterMappingEdit();
           saveMappingRect(mappingNorm);
           return false;
         }
