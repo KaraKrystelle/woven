@@ -736,7 +736,7 @@ export function createThreadSketch(containerId) {
           'Debug ON — D hide · F fullscreen',
           `FPS ~${p.frameRate().toFixed(0)}`,
           `Map L ${mo.l.toFixed(3)} T ${mo.t.toFixed(3)} R ${mo.r.toFixed(3)} B ${mo.b.toFixed(3)}`,
-          mappingEditMode ? 'Mapping edit ON — M off · drag edges' : 'M — mapping edit',
+          mappingEditMode ? 'Mapping edit ON — M off · drag edges · arrows move rect' : 'M — mapping edit',
         ];
         let ly = 10;
         for (const line of lines) {
@@ -797,6 +797,28 @@ export function createThreadSketch(containerId) {
         mappingEditMode = !mappingEditMode;
         if (!mappingEditMode) dragEdge = null;
         return false;
+      }
+      if (debugMode && mappingEditMode) {
+        let dh = 0;
+        let dv = 0;
+        if (p.keyCode === p.LEFT_ARROW) dh = -1;
+        else if (p.keyCode === p.RIGHT_ARROW) dh = 1;
+        else if (p.keyCode === p.UP_ARROW) dv = -1;
+        else if (p.keyCode === p.DOWN_ARROW) dv = 1;
+        if (dh !== 0 || dv !== 0) {
+          const stepX = 4 / Math.max(1, p.width);
+          const stepY = 4 / Math.max(1, p.height);
+          const m = { ...mappingNorm };
+          m.l += dh * stepX;
+          m.r += dh * stepX;
+          m.t += dv * stepY;
+          m.b += dv * stepY;
+          mappingNorm = clampMapping(m);
+          nodesDirty = true;
+          markLayerDirty();
+          saveMappingRect(mappingNorm);
+          return false;
+        }
       }
     };
   };
