@@ -17,7 +17,7 @@ const ids = {
   page: 'tablet-page',
   version: 'tablet-version',
 };
-const TABLET_VERSION = 'v2026.05.06.1';
+const TABLET_VERSION = 'v2026.05.06.2';
 const LOOK_UP_MS = 5000;
 /** One selection at a time (tap again to clear). Experiences stay multi-select. */
 const SINGLE_SELECT_KEYS = new Set(['countries', 'ethnicBackgrounds']);
@@ -147,6 +147,74 @@ function renderPage() {
   root.appendChild(section);
 }
 
+function toggleTabletFullscreen() {
+  const doc = document;
+  const root = document.documentElement;
+  const fullscreenEl = doc.fullscreenElement || doc.webkitFullscreenElement;
+  if (!fullscreenEl) {
+    const req = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
+    if (req) req().catch(() => {});
+  } else {
+    const exit = doc.exitFullscreen?.bind(doc) || doc.webkitExitFullscreen?.bind(doc);
+    if (exit) exit().catch(() => {});
+  }
+}
+
+/** Double-tap top-right corner (touch / pen) toggles fullscreen kiosk-style. */
+function setupFullscreenCornerGesture() {
+  let cornerTap = { t: 0, x: 0, y: 0 };
+  const DOUBLE_MS = 450;
+  const MOVE_TOL = 56;
+
+  function cornerInset() {
+    return Math.min(112, Math.min(window.innerWidth, window.innerHeight) * 0.22);
+  }
+
+  function isTopRightCorner(x, y) {
+    const inset = cornerInset();
+    return x >= window.innerWidth - inset && y <= inset;
+  }
+
+  function handleEnd(clientX, clientY) {
+    if (!isTopRightCorner(clientX, clientY)) {
+      cornerTap.t = 0;
+      return;
+    }
+    const now = Date.now();
+    if (
+      cornerTap.t &&
+      now - cornerTap.t < DOUBLE_MS &&
+      Math.hypot(clientX - cornerTap.x, clientY - cornerTap.y) < MOVE_TOL
+    ) {
+      toggleTabletFullscreen();
+      cornerTap.t = 0;
+    } else {
+      cornerTap = { t: now, x: clientX, y: clientY };
+    }
+  }
+
+  if (window.PointerEvent) {
+    document.addEventListener(
+      'pointerup',
+      (e) => {
+        if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+        handleEnd(e.clientX, e.clientY);
+      },
+      { passive: true }
+    );
+  } else {
+    document.addEventListener(
+      'touchend',
+      (e) => {
+        const t = e.changedTouches[0];
+        if (!t) return;
+        handleEnd(t.clientX, t.clientY);
+      },
+      { passive: true }
+    );
+  }
+}
+
 function setupListeners() {
   let lastTouchToggleAt = 0;
   let lastTouchToggleKey = '';
@@ -264,6 +332,7 @@ async function init() {
   resetDraftSelections();
   renderPage();
   setupListeners();
+  setupFullscreenCornerGesture();
   subscribeConfig(() => {
     renderPage();
   });
