@@ -498,7 +498,7 @@ export function createThreadSketch(containerId) {
 
     if (glow && ctx) {
       ctx.shadowColor = col;
-      ctx.shadowBlur = 18 + thick * 4;
+      ctx.shadowBlur = 3 + thick * 2.2;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
     }
@@ -611,12 +611,13 @@ export function createThreadSketch(containerId) {
   function drawNode(p, n, isSelected, accentColor) {
     const accent = accentColor || options.threadColor || '#c49bff';
     const size = isSelected ? 12 : 6;
+    const thick = Math.max(1, (vis.threadThickness || 2) * (vis.density ?? 0.6));
     p.noStroke();
     p.fill(isSelected ? accent : 'rgba(255,255,255,0.25)');
     const ctx = p.drawingContext;
     if (vis.glow && isSelected && ctx) {
       ctx.shadowColor = accent;
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = Math.min(12, 3 + thick * 1.6);
     }
     p.circle(n.x, n.y, size);
     if (ctx && vis.glow) ctx.shadowBlur = 0;
