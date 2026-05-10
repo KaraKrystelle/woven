@@ -17,7 +17,8 @@ const ids = {
   page: 'tablet-page',
   version: 'tablet-version',
 };
-const TABLET_VERSION = 'v2026.05.06.2';
+const TABLET_VERSION = 'v2026.05.06.5';
+const CONTINUE_BTN_ID = 'tablet-step-continue';
 const LOOK_UP_MS = 5000;
 /** One selection at a time (tap again to clear). Experiences stay multi-select. */
 const SINGLE_SELECT_KEYS = new Set(['countries', 'ethnicBackgrounds']);
@@ -85,6 +86,22 @@ function collectParticipantSelections() {
   };
 }
 
+function syncContinueButtonState() {
+  const btn = document.getElementById(CONTINUE_BTN_ID);
+  if (!btn || !(btn instanceof HTMLButtonElement)) return;
+  const page = PAGES[pageIndex];
+  if (!page || page.type !== 'choices' || !page.key) {
+    btn.disabled = false;
+    return;
+  }
+  if (SINGLE_SELECT_KEYS.has(page.key)) {
+    const sel = draftSelections[page.key];
+    btn.disabled = !sel || sel.length === 0;
+  } else {
+    btn.disabled = false;
+  }
+}
+
 function renderPage() {
   const root = $(ids.page);
   if (!root) return;
@@ -123,6 +140,26 @@ function renderPage() {
   const title = document.createElement('h2');
   title.className = 'tablet-page-title';
   title.textContent = page.title;
+
+  const headerRow = document.createElement('div');
+  headerRow.className = 'tablet-page-header-row';
+
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'tablet-back-btn';
+  back.setAttribute('aria-label', 'Previous step');
+  back.textContent = '\u2190';
+  back.addEventListener('click', () => {
+    pageIndex = pageIndex <= 1 ? 0 : pageIndex - 1;
+    renderPage();
+  });
+
+  const headerTrail = document.createElement('div');
+  headerTrail.className = 'tablet-page-header-trail';
+  headerTrail.setAttribute('aria-hidden', 'true');
+
+  headerRow.append(back, title, headerTrail);
+
   const hint = document.createElement('p');
   hint.className = 'tablet-page-hint';
   hint.textContent =
@@ -135,7 +172,9 @@ function renderPage() {
   const actions = document.createElement('div');
   actions.className = 'tablet-actions';
   const next = createActionButton(page.submit ? 'Submit' : 'Continue');
+  next.id = CONTINUE_BTN_ID;
   next.addEventListener('click', () => {
+    if (next.disabled) return;
     if (page.submit) submitSelections();
     else {
       pageIndex += 1;
@@ -143,8 +182,10 @@ function renderPage() {
     }
   });
   actions.appendChild(next);
-  section.append(title, hint, nodes, actions);
+
+  section.append(headerRow, hint, nodes, actions);
   root.appendChild(section);
+  syncContinueButtonState();
 }
 
 function toggleTabletFullscreen() {
@@ -250,6 +291,7 @@ function setupListeners() {
         });
       }
       btn.blur();
+      syncContinueButtonState();
       return;
     }
 
@@ -260,6 +302,7 @@ function setupListeners() {
     btn.classList.toggle('tablet-node--on', isOn);
     btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
     btn.blur();
+    syncContinueButtonState();
   };
   const container = $(ids.page);
   if (window.PointerEvent) {

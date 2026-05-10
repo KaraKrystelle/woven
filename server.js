@@ -53,6 +53,8 @@ const MIME_TYPES = {
 
 let installationState = loadStateFromDisk();
 const clients = new Set();
+/** Monotonic signal for clients to force a full projector repaint (not persisted). */
+let projectionRedrawNonce = 0;
 
 /** Keeps some proxies/browsers from dropping idle SSE connections. */
 const SSE_PING_MS = 25_000;
@@ -100,8 +102,12 @@ function sendEvent(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
+function stateBroadcastPayload() {
+  return { type: 'state', ...installationState, projectionRedrawNonce };
+}
+
 function broadcastState() {
-  const payload = { type: 'state', ...installationState };
+  const payload = stateBroadcastPayload();
   for (const client of clients) {
     sendEvent(client, payload);
   }
@@ -181,7 +187,14 @@ const server = http.createServer(async (req, res) => {
   const parsed = new URL(req.url, `http://localhost:${PORT}`);
 
   if (req.method === 'GET' && parsed.pathname === '/api/state') {
-    json(res, 200, installationState);
+    json(res, 200, { ...installationState, projectionRedrawNonce });
+    return;
+  }
+
+  if (req.method === 'POST' && parsed.pathname === '/api/redraw') {
+    projectionRedrawNonce++;
+    broadcastState();
+    json(res, 200, { ok: true, projectionRedrawNonce });
     return;
   }
 
@@ -213,7 +226,7 @@ const server = http.createServer(async (req, res) => {
     });
     res.write('\n');
     clients.add(res);
-    sendEvent(res, { type: 'state', ...installationState });
+    sendEvent(res, stateBroadcastPayload());
     req.on('close', () => {
       clients.delete(res);
     });

@@ -13,6 +13,7 @@ import {
   buildInstallationBackup,
   applyInstallationBackup,
   subscribeConfig,
+  isBackendMode,
 } from './state.js';
 
 const KEYS = ['countries', 'ethnicBackgrounds', 'goodExperiences', 'badExperiences'];
@@ -167,6 +168,26 @@ async function init() {
   const setClearStatus = (msg) => {
     if (clearStatusEl) clearStatusEl.textContent = msg || '';
   };
+
+  const redrawStatusEl = $('redrawProjectorStatus');
+  const setRedrawStatus = (msg) => {
+    if (redrawStatusEl) redrawStatusEl.textContent = msg || '';
+  };
+
+  $('redrawProjector')?.addEventListener('click', async () => {
+    if (!isBackendMode()) {
+      setRedrawStatus('Redraw needs the exhibit server (reload this page with the server running).');
+      return;
+    }
+    setRedrawStatus('');
+    try {
+      const res = await fetch('/api/redraw', { method: 'POST', cache: 'no-store' });
+      if (!res.ok) throw new Error(await res.text());
+      setRedrawStatus('Redraw signal sent to projectors.');
+    } catch (err) {
+      setRedrawStatus(`Redraw failed: ${err?.message || err}`);
+    }
+  });
 
   $('clearThreads')?.addEventListener('click', async () => {
     if (!confirm('Clear all submitted threads from the projector?')) return;

@@ -12,6 +12,7 @@ import {
   DEFAULT_OPTIONS,
   DEFAULT_CONFIG,
   threadColorFromCountryEthnicCombo,
+  PROJECTION_REDRAW_EVENT,
 } from './state.js';
 
 function resolveVisual(cfg, opts) {
@@ -25,8 +26,8 @@ function resolveVisual(cfg, opts) {
   };
 }
 
-const THREAD_GROW_SPEED = 0.007;
-const LABEL_FADE_SPAN = 0.2;
+const THREAD_GROW_SPEED = 0.0055;
+const LABEL_FADE_SPAN = 0.28;
 const LABEL_FONT_SIZE = 12;
 const LABEL_OFFSET = 14;
 const MAP_EDGE_HIT_PX = 30;
@@ -438,6 +439,8 @@ export function createThreadSketch(containerId) {
   let projectionMidY = 0;
   /** @type {'left'|'right'|'top'|'bottom'|null} */
   let dragEdge = null;
+  /** Opaque clears for a few frames after admin “redraw” to drop translucent trail buildup. */
+  let solidBackgroundFramesRemaining = 0;
 
   function syncProjectorDebugChrome() {
     document.body.classList.toggle('projector-debug', debugMode);
@@ -459,6 +462,11 @@ export function createThreadSketch(containerId) {
     if (completedLayer) {
       completedLayer.clear();
     }
+  }
+
+  function forceFullProjectionRedraw() {
+    invalidateAfterMappingEdit();
+    solidBackgroundFramesRemaining = 4;
   }
 
   function refreshNodes(p) {
@@ -662,6 +670,8 @@ export function createThreadSketch(containerId) {
         if (configChanged) nodesDirty = true;
         if (configChanged || submittedChanged) markLayerDirty();
       });
+      const onProjectionRedraw = () => forceFullProjectionRedraw();
+      window.addEventListener(PROJECTION_REDRAW_EVENT, onProjectionRedraw);
       syncProjectorDebugChrome();
     };
 
@@ -669,7 +679,10 @@ export function createThreadSketch(containerId) {
       refreshNodes(p);
       vis = resolveVisual(config, options);
       const spd = 0.3 + (vis.animationSpeed ?? 0.5) * 0.4;
-      if (vis.animation === 'pulse') {
+      if (solidBackgroundFramesRemaining > 0) {
+        p.background(8, 10, 18);
+        solidBackgroundFramesRemaining -= 1;
+      } else if (vis.animation === 'pulse') {
         const glow = 0.5 + 0.5 * Math.sin(p.frameCount * 0.03 * spd);
         p.background(8, 10, 18, 20 + 8 * glow);
       } else if (vis.animation === 'flow') {

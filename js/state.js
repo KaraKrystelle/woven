@@ -7,6 +7,8 @@
 const STORAGE_KEY = 'thread-installation-options';
 const CONFIG_KEY = 'thread-installation-config';
 const STATE_EVENT = 'woven:state-changed';
+/** Fired when admin/server requests a full projector repaint (`detail.nonce`). */
+export const PROJECTION_REDRAW_EVENT = 'woven:projection-redraw';
 
 export const DEFAULT_OPTIONS = {
   selectedNodes: [],
@@ -53,6 +55,8 @@ let sseReconnectAttempt = 0;
 /** Poll GET /api/state as fallback when SSE misses an update. */
 let statePollTimer = null;
 let backendSyncHooksInstalled = false;
+/** Latest redraw nonce from server; used to avoid spurious redraw on first hydrate. */
+let lastProjectionRedrawNonce = null;
 
 function mergeOptions(raw) {
   return { ...DEFAULT_OPTIONS, ...(raw || {}) };
@@ -108,6 +112,16 @@ function applyRemoteState(payload) {
   state.config = mergeConfig(payload?.config);
   persistLocalCache();
   emitStateChange();
+  const n = payload?.projectionRedrawNonce;
+  if (typeof n !== 'number') return;
+  if (lastProjectionRedrawNonce === null) {
+    lastProjectionRedrawNonce = n;
+    return;
+  }
+  if (n > lastProjectionRedrawNonce) {
+    lastProjectionRedrawNonce = n;
+    window.dispatchEvent(new CustomEvent(PROJECTION_REDRAW_EVENT, { detail: { nonce: n } }));
+  }
 }
 
 function comparableInstallationPayload(payload) {
@@ -128,9 +142,12 @@ async function fetchAndApplyStateIfDrifted() {
   if (!backendMode) return;
   try {
     const payload = await requestJson('/api/state');
-    if (comparableInstallationPayload(payload) !== comparableLocalInstallation()) {
-      applyRemoteState(payload);
-    }
+    const sameInstall = comparableInstallationPayload(payload) === comparableLocalInstallation();
+    const n = payload?.projectionRedrawNonce;
+    const nonceAdvances =
+      typeof n === 'number' && lastProjectionRedrawNonce !== null && n > lastProjectionRedrawNonce;
+    if (sameInstall && !nonceAdvances) return;
+    applyRemoteState(payload);
   } catch (_) {}
 }
 
