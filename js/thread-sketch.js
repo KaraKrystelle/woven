@@ -1,6 +1,7 @@
 /**
  * P5.js sketch: digital threads from participant choices.
- * Nodes from config: countries (left arc), ethnicities (right arc), experiences (inner disk, spread by relaxation).
+ * Nodes from config: countries (top band), ethnicities (bottom band), experiences (middle band),
+ * each spread by seeded relaxation within the mapped projection aspect.
  * Threads animate in slowly; labels fade in/out briefly as thread passes each node.
  */
 
@@ -49,53 +50,52 @@ function hash01(str, salt) {
   return h / 2 ** 32;
 }
 
-/** Uniform random point in disk radius R centered at (cx, cy); stable per id. */
-function diskPositionFromId(id, cx, cy, rDisk) {
-  const u = hash01(id, 'θ');
-  const v = hash01(id, 'ρ');
-  const theta = u * Math.PI * 2;
-  const rad = rDisk * Math.sqrt(v);
+function clampToRect(x, y, xMin, yMin, xMax, yMax) {
   return {
-    x: cx + rad * Math.cos(theta),
-    y: cy + rad * Math.sin(theta),
+    x: Math.min(xMax, Math.max(xMin, x)),
+    y: Math.min(yMax, Math.max(yMin, y)),
   };
 }
 
-function clampToDisk(x, y, cx, cy, rMax) {
-  const dx = x - cx;
-  const dy = y - cy;
-  const d = Math.hypot(dx, dy);
-  if (d <= rMax || d < 1e-12) return { x, y };
-  const s = rMax / d;
-  return { x: cx + dx * s, y: cy + dy * s };
+/** Deterministic seed inside axis-aligned rectangle (layout space). */
+function seedRectFromId(id, xMin, yMin, xMax, yMax) {
+  const u = hash01(id, 'rx');
+  const v = hash01(id, 'ry');
+  return {
+    x: xMin + u * (xMax - xMin),
+    y: yMin + v * (yMax - yMin),
+  };
 }
 
-const EXPERIENCE_RELAX_ITERATIONS = 84;
+const BAND_RELAX_ITERATIONS = 96;
 
 /**
- * Spread experience nodes in the inner disk: seed from hash, then deterministic repulsion.
- * @param {{ id: string }[]} experienceNodes
- * @returns {Map<string, { x: number, y: number }>}
+ * Hash-seeded positions then repulsion for roughly even spacing within a band rectangle.
+ * @param {string[]} nodeIds
  */
-function relaxExperienceDiskPositions(experienceNodes, cx, cy, rInner) {
-  const ids = [...new Set(experienceNodes.map((n) => n.id))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+function relaxNodesInRect(nodeIds, xMin, yMin, xMax, yMax) {
+  const ids = [...new Set(nodeIds)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   /** @type {Map<string, { x: number, y: number }>} */
   const pos = new Map();
+  const rw = Math.max(1e-6, xMax - xMin);
+  const rh = Math.max(1e-6, yMax - yMin);
+
   for (const id of ids) {
-    pos.set(id, diskPositionFromId(id, cx, cy, rInner));
+    pos.set(id, seedRectFromId(id, xMin, yMin, xMax, yMax));
   }
 
   const k = ids.length;
   if (k <= 1) return pos;
 
-  const meanChord = (Math.sqrt(Math.PI) * rInner) / Math.sqrt(k);
-  const restDist = Math.min(rInner * 0.38, meanChord * 1.05);
-  const influence = restDist * 2.85;
+  const area = rw * rh;
+  const ideal = Math.sqrt(area / k);
+  const restDist = Math.min(Math.min(rw, rh) * 0.2, ideal * 1.06);
+  const influence = restDist * 2.9;
+  const scaleStep = Math.min(rw, rh) * 0.095;
 
-  for (let iter = 0; iter < EXPERIENCE_RELAX_ITERATIONS; iter++) {
-    const phase = iter / Math.max(EXPERIENCE_RELAX_ITERATIONS - 1, 1);
-    const damp = 0.75 * (1 - phase) + 0.28 * phase;
-
+  for (let iter = 0; iter < BAND_RELAX_ITERATIONS; iter++) {
+    const phase = iter / Math.max(BAND_RELAX_ITERATIONS - 1, 1);
+    const damp = 0.74 * (1 - phase) + 0.26 * phase;
     /** @type {Map<string, { x: number, y: number }>} */
     const next = new Map();
 
@@ -121,22 +121,16 @@ function relaxExperienceDiskPositions(experienceNodes, cx, cy, rInner) {
 
         if (d >= influence) continue;
 
-        let nx = dx / d;
-        let ny = dy / d;
-
         const overlap = Math.max(0, restDist - d);
         const soft = Math.max(0, influence - d) / influence;
         const mag = (overlap / restDist) ** 2 + soft ** 3 * 0.45;
 
-        fx += nx * mag;
-        fy += ny * mag;
+        fx += (dx / d) * mag;
+        fy += (dy / d) * mag;
       }
 
-      const step = rInner * 0.11 * damp;
-      let x2 = p.x + fx * step;
-      let y2 = p.y + fy * step;
-      const clamped = clampToDisk(x2, y2, cx, cy, rInner * 0.998);
-      next.set(id, clamped);
+      const step = scaleStep * damp;
+      next.set(id, clampToRect(p.x + fx * step, p.y + fy * step, xMin, yMin, xMax, yMax));
     }
 
     for (const id of ids) pos.set(id, /** @type {{ x: number, y: number }} */ (next.get(id)));
@@ -221,36 +215,64 @@ function buildNodesFromConfig(config) {
   return nodes;
 }
 
-/** Layout in abstract square [0,w]×[0,h] — same proportions as full-screen layout. */
+/**
+ * Wide-friendly layout: countries in the top band, ethnicities in the bottom band,
+ * good/bad experiences in the middle; hash-seeded jitter + repulsion for even spread per band.
+ */
 function getNodePositionsLayoutSpace(nodes, w, h) {
-  const cx = w / 2;
-  const cy = h / 2;
-  const rOuter = Math.min(cx, cy) * 0.42;
-  const rInner = Math.min(cx, cy) * 0.28;
+  const padX = Math.max(2, w * 0.005);
+  const padY = Math.max(2, h * 0.004);
+  const topFrac = 0.25;
+  const botFrac = 0.25;
 
-  const experienceNodes = nodes.filter(
-    (n) => n.group === 'goodExperiences' || n.group === 'badExperiences'
+  const xMin = padX;
+  const xMax = w - padX;
+  const topY0 = padY;
+  let topY1 = h * topFrac - padY * 0.12;
+  let botY0 = h * (1 - botFrac) + padY * 0.12;
+  const botY1 = h - padY;
+  let midY0 = h * topFrac + padY * 0.28;
+  let midY1 = h * (1 - botFrac) - padY * 0.28;
+
+  const minMid = Math.min(w, h) * 0.18;
+  if (midY1 - midY0 < minMid) {
+    const mid = h / 2;
+    const half = Math.max(minMid / 2, (midY1 - midY0) / 2 + minMid / 4);
+    midY0 = mid - half;
+    midY1 = mid + half;
+    topY1 = Math.min(topY1, midY0 - padY);
+    botY0 = Math.max(botY0, midY1 + padY);
+  }
+
+  topY1 = Math.max(topY0 + 2, topY1);
+  midY1 = Math.max(midY0 + 2, midY1);
+  botY0 = Math.min(botY1 - 2, botY0);
+
+  const countryNodes = nodes.filter((n) => n.group === 'countries');
+  const ethnicNodes = nodes.filter((n) => n.group === 'ethnicBackgrounds');
+  const expNodes = nodes.filter((n) => n.group === 'goodExperiences' || n.group === 'badExperiences');
+
+  const topMap = relaxNodesInRect(
+    countryNodes.map((n) => n.id),
+    xMin,
+    topY0,
+    xMax,
+    topY1
   );
-  const relaxedDisk = relaxExperienceDiskPositions(experienceNodes, cx, cy, rInner);
+  const botMap = relaxNodesInRect(ethnicNodes.map((n) => n.id), xMin, botY0, xMax, botY1);
+  const midMap = relaxNodesInRect(expNodes.map((n) => n.id), xMin, midY0, xMax, midY1);
 
   return nodes.map((n) => {
-    let angle, r;
-    if (n.group === 'countries') {
-      const t = n.total > 1 ? n.index / (n.total - 1) : 0.5;
-      angle = 0.25 + t * 0.5;
-      r = rOuter;
-    } else if (n.group === 'ethnicBackgrounds') {
-      const t = n.total > 1 ? n.index / (n.total - 1) : 0.5;
-      angle = 0.75 + t * 0.5;
-      r = rOuter;
-    } else {
-      const p = relaxedDisk.get(n.id);
-      const { x, y } = p || diskPositionFromId(n.id, cx, cy, rInner);
-      return { ...n, x, y };
+    let pt = null;
+    if (n.group === 'countries') pt = topMap.get(n.id);
+    else if (n.group === 'ethnicBackgrounds') pt = botMap.get(n.id);
+    else pt = midMap.get(n.id);
+    if (!pt) {
+      if (n.group === 'countries') pt = seedRectFromId(n.id, xMin, topY0, xMax, topY1);
+      else if (n.group === 'ethnicBackgrounds') pt = seedRectFromId(n.id, xMin, botY0, xMax, botY1);
+      else pt = seedRectFromId(n.id, xMin, midY0, xMax, midY1);
     }
-    const x = cx + r * Math.cos(angle * Math.PI * 2);
-    const y = cy + r * Math.sin(angle * Math.PI * 2);
-    return { ...n, x, y };
+    return { ...n, x: pt.x, y: pt.y };
   });
 }
 
@@ -271,7 +293,7 @@ function layoutBounds(layoutNodes, fallbackW, fallbackH) {
     maxY = Math.max(maxY, n.y);
   }
   const span = Math.max(maxX - minX, maxY - minY, 1e-6);
-  const pad = span * 0.08;
+  const pad = span * 0.015;
   return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
 }
 
