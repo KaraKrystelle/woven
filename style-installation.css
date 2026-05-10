@@ -95,7 +95,7 @@ body {
 }
 
 .tablet-header {
-  padding: 24px 20px 16px;
+  padding: 24px 16px 16px;
   text-align: center;
 }
 
@@ -121,13 +121,16 @@ body {
 }
 
 .tablet-main {
-  max-width: 560px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
-  padding: 0 20px 32px;
+  padding: 0 16px 32px;
+  box-sizing: border-box;
 }
 
 .tablet-page {
   min-height: 58vh;
+  width: 100%;
 }
 
 .tablet-page-card {
@@ -187,11 +190,14 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  width: 100%;
 }
 
 .tablet-node {
   appearance: none;
   -webkit-appearance: none;
+  flex: 1 1 148px;
+  min-width: 0;
   border: 2px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -359,7 +365,7 @@ body {
 }
 
 @media (min-width: 600px) {
-  .tablet-header { padding: 28px 24px 20px; }
-  .tablet-main { padding: 0 24px 40px; }
-  .tablet-node { padding: 16px 20px; }
+  .tablet-header { padding: 28px 20px 20px; }
+  .tablet-main { padding: 0 20px 40px; }
+  .tablet-node { padding: 16px 20px; flex: 1 1 160px; }
 }
