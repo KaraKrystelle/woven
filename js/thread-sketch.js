@@ -28,7 +28,9 @@ function resolveVisual(cfg, opts) {
 
 const THREAD_GROW_SPEED = 0.0055;
 const LABEL_FADE_SPAN = 0.28;
-const LABEL_FONT_SIZE = 12;
+/** Keep label at peak opacity this long after geometric fade ends (ms). */
+const LABEL_LINGER_MS = 2000;
+const LABEL_FONT_SIZE = 14;
 const LABEL_OFFSET = 14;
 const MAP_EDGE_HIT_PX = 30;
 const MAP_EDGE_STROKE = 6;
@@ -441,6 +443,8 @@ export function createThreadSketch(containerId) {
   let dragEdge = null;
   /** Opaque clears for a few frames after admin “redraw” to drop translucent trail buildup. */
   let solidBackgroundFramesRemaining = 0;
+  /** Per-node label linger after thread passes ({ peak, until }). */
+  const labelLingerHold = new Map();
 
   function syncProjectorDebugChrome() {
     document.body.classList.toggle('projector-debug', debugMode);
@@ -459,6 +463,7 @@ export function createThreadSketch(containerId) {
     submittedCache.length = 0;
     pathProgress = 0;
     lastPathKey = '';
+    labelLingerHold.clear();
     if (completedLayer) {
       completedLayer.clear();
     }
@@ -635,6 +640,7 @@ export function createThreadSketch(containerId) {
     if (opacity <= 0) return;
     const cyRef = midY ?? p.height / 2;
     const ty = n.y < cyRef ? n.y + LABEL_OFFSET : n.y - LABEL_OFFSET;
+    p.textFont('Montserrat');
     p.textSize(LABEL_FONT_SIZE);
     p.textAlign(p.CENTER, n.y < cyRef ? p.TOP : p.BOTTOM);
     p.fill(255, 255, 255);
@@ -651,6 +657,9 @@ export function createThreadSketch(containerId) {
       if (el) cnv.parent(el);
       p.pixelDensity(1);
       p.frameRate(60);
+      document.fonts.ready.then(() => {
+        p.textFont('Montserrat');
+      });
       options = loadOptions();
       config = loadConfig();
       refreshNodes(p);
@@ -764,8 +773,32 @@ export function createThreadSketch(containerId) {
         labelOpacity.set(b.id, Math.max(labelOpacity.get(b.id) ?? 0, oEnd));
       }
 
+      const now = performance.now();
+      for (const [nodeId, geoOp] of labelOpacity) {
+        if (geoOp > 0.02) {
+          const prev = labelLingerHold.get(nodeId);
+          const peak = Math.max(prev?.peak ?? 0, geoOp);
+          labelLingerHold.set(nodeId, { until: now + LABEL_LINGER_MS, peak });
+        }
+      }
+
+      const labelOpacityMerged = new Map(labelOpacity);
+      for (const [nodeId, hold] of labelLingerHold) {
+        if (now < hold.until) {
+          labelOpacityMerged.set(nodeId, Math.max(labelOpacityMerged.get(nodeId) ?? 0, hold.peak));
+        }
+      }
+
+      for (const nodeId of [...labelLingerHold.keys()]) {
+        const hold = labelLingerHold.get(nodeId);
+        const geoOp = labelOpacity.get(nodeId) ?? 0;
+        if (hold && now >= hold.until && geoOp < 0.02) {
+          labelLingerHold.delete(nodeId);
+        }
+      }
+
       for (const n of nodes) drawNode(p, n, selectedIds.has(n.id), threadColor);
-      labelOpacity.forEach((opacity, nodeId) => {
+      labelOpacityMerged.forEach((opacity, nodeId) => {
         const n = nodes.find((nn) => nn.id === nodeId);
         if (n) drawLabel(p, n, opacity, projectionMidY);
       });
@@ -778,7 +811,8 @@ export function createThreadSketch(containerId) {
         p.fill(200, 230, 255);
         p.noStroke();
         p.textAlign(p.LEFT, p.TOP);
-        p.textSize(13);
+        p.textFont('Montserrat');
+        p.textSize(15);
         const mo = mappingNorm;
         const lines = [
           'Debug ON — D hide · F fullscreen',

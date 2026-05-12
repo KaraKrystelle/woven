@@ -1,5 +1,11 @@
 /* Thread installation — tablet & projector */
 
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap");
+
+html {
+  font-size: 118%;
+}
+
 :root {
   color-scheme: dark;
   --bg: #0a0c14;
@@ -22,10 +28,17 @@ html, body {
 }
 
 body {
-  font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: "Montserrat", ui-sans-serif, system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 /* ----- Projector ----- */
@@ -60,7 +73,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
   z-index: 10;
   opacity: 0;
@@ -76,8 +89,8 @@ body {
 }
 
 .projector-help kbd {
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-family: "Montserrat", ui-sans-serif, sans-serif;
+  font-size: 13px;
   background: rgba(0,0,0,0.3);
   border: 1px solid var(--border);
   padding: 2px 6px;
@@ -87,6 +100,9 @@ body {
 /* ----- Tablet ----- */
 
 .tablet-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: env(safe-area-inset-bottom);
@@ -95,6 +111,7 @@ body {
 }
 
 .tablet-header {
+  flex-shrink: 0;
   padding: 24px 16px 16px;
   text-align: center;
 }
@@ -103,24 +120,14 @@ body {
   font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin: 0 0 6px;
-}
-
-.tablet-subtitle {
-  font-size: 0.95rem;
-  color: var(--muted);
   margin: 0;
 }
 
-.tablet-version {
-  margin: 8px 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-  opacity: 0.85;
-}
-
 .tablet-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   width: 100%;
   max-width: none;
   margin: 0 auto;
@@ -128,20 +135,96 @@ body {
   box-sizing: border-box;
 }
 
+.tablet-main--start {
+  justify-content: center;
+  padding-top: 0;
+}
+
+.tablet-main--start .tablet-page {
+  min-height: 0;
+}
+
 .tablet-page {
-  min-height: 58vh;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   width: 100%;
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+  transform-origin: center center;
+  transition:
+    opacity 0.34s cubic-bezier(0.33, 1, 0.68, 1),
+    transform 0.34s cubic-bezier(0.33, 1, 0.68, 1),
+    filter 0.34s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/** Outgoing screen: dissolve + slight outward zoom + blur (“ghost” away). */
+.tablet-page.tablet-page--leave {
+  opacity: 0;
+  transform: scale(1.065);
+  filter: blur(7px);
+}
+
+/**
+ * Snapshot before enter animation (no transition): small, blurred, invisible.
+ * Removing this class lets the default .tablet-page transition run → zoom-in reveal.
+ */
+.tablet-page.tablet-page--enter-from {
+  opacity: 0;
+  transform: scale(0.93);
+  filter: blur(10px);
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tablet-page {
+    transform: none !important;
+    filter: none !important;
+    transition: opacity 0.2s ease;
+  }
+
+  .tablet-page.tablet-page--leave {
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .tablet-page.tablet-page--enter-from {
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
 }
 
 .tablet-page-card {
   display: flex;
-  min-height: 58vh;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
+  min-height: 0;
+  width: 100%;
 }
 
-.tablet-page-card--choices {
-  justify-content: flex-start;
+.tablet-page-card--start {
+  min-height: 0;
+  gap: clamp(16px, 4vh, 28px);
+  align-items: center;
+}
+
+.tablet-page-card--start .tablet-start-intro {
+  align-self: stretch;
+}
+
+
+.tablet-start-intro {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.05rem, 3.6vw, 1.35rem);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text);
+  padding: 0 8px clamp(20px, 4vh, 36px);
 }
 
 .tablet-page-header-row {
@@ -204,10 +287,20 @@ body {
 .tablet-page-hint {
   margin: 0 0 20px;
   color: var(--muted);
+  text-align: center;
+}
+
+.tablet-page-card--choices .tablet-page-nodes {
+  width: 66.666%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  justify-content: center;
+  align-content: center;
 }
 
 .tablet-page-nodes {
-  align-content: flex-start;
+  align-content: center;
 }
 
 .tablet-look-up {
@@ -365,6 +458,20 @@ body {
   flex-wrap: wrap;
 }
 
+.tablet-page-card--choices .tablet-actions {
+  width: 66.666%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  justify-content: center;
+}
+
+.tablet-page-card--choices .tablet-btn--primary {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+}
+
 .tablet-btn {
   display: inline-flex;
   align-items: center;
@@ -406,6 +513,15 @@ body {
   max-height: 66vh;
   padding: 96px 24px;
   font-size: clamp(1.45rem, 5.5vw, 2.35rem);
+}
+
+.tablet-page-card--start .tablet-btn--hero {
+  width: 66.666%;
+  max-width: 100%;
+  height: auto;
+  min-height: 220px;
+  max-height: min(50vh, 440px);
+  padding: 48px 24px;
 }
 
 .tablet-btn--hero:hover,

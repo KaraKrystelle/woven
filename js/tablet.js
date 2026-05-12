@@ -15,19 +15,18 @@ import {
 
 const ids = {
   page: 'tablet-page',
-  version: 'tablet-version',
 };
-const TABLET_VERSION = 'v2026.05.06.5';
 const CONTINUE_BTN_ID = 'tablet-step-continue';
 const LOOK_UP_MS = 5000;
-/** One selection at a time (tap again to clear). Experiences stay multi-select. */
+/** One selection at a time (tap again to clear). */
 const SINGLE_SELECT_KEYS = new Set(['countries', 'ethnicBackgrounds']);
+const EXPERIENCES_SELECTION_MAX = 2;
 const PAGES = [
   { type: 'start', title: 'Start' },
-  { type: 'choices', key: 'countries', title: 'Country' },
-  { type: 'choices', key: 'ethnicBackgrounds', title: 'Ethnic background' },
-  { type: 'choices', key: 'goodExperiences', title: 'Good experiences' },
-  { type: 'choices', key: 'badExperiences', title: 'Bad experiences', submit: true },
+  { type: 'choices', key: 'countries', title: 'Where were you born?' },
+  { type: 'choices', key: 'ethnicBackgrounds', title: 'Which ethnic background do you identify best with?' },
+  { type: 'choices', key: 'goodExperiences', title: 'Choose up to 2 Good Experiences' },
+  { type: 'choices', key: 'badExperiences', title: 'Choose up to 2 Bad Experiences', submit: true },
   { type: 'lookUp', title: 'Look Up' },
 ];
 
@@ -39,6 +38,14 @@ let draftSelections = {
 };
 let pageIndex = 0;
 let lookUpTimer = null;
+let tabletRenderedOnce = false;
+let fadeGeneration = 0;
+/** Exit phase duration (matches CSS); enter uses same ease/duration on #tablet-page */
+const PAGE_TRANSITION_MS = 340;
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+}
 
 function $(id) {
   return document.getElementById(id);
@@ -97,22 +104,33 @@ function syncContinueButtonState() {
   if (SINGLE_SELECT_KEYS.has(page.key)) {
     const sel = draftSelections[page.key];
     btn.disabled = !sel || sel.length === 0;
+  } else if (page.key === 'goodExperiences' || page.key === 'badExperiences') {
+    const sel = draftSelections[page.key] || [];
+    btn.disabled = sel.length === 0;
   } else {
     btn.disabled = false;
   }
 }
 
-function renderPage() {
+/** Builds DOM for current step (instant swap). */
+function renderPageCore() {
   const root = $(ids.page);
   if (!root) return;
   const page = PAGES[pageIndex] || PAGES[0];
   const config = loadConfig();
   root.innerHTML = '';
 
+  const main = root.closest('.tablet-main');
+  if (main) main.classList.toggle('tablet-main--start', page.type === 'start');
+
   const section = document.createElement('section');
   section.className = `tablet-page-card tablet-page-card--${page.type}`;
 
   if (page.type === 'start') {
+    const intro = document.createElement('p');
+    intro.className = 'tablet-start-intro';
+    intro.textContent = 'Start the experience to join the WOVEN world';
+
     const begin = createActionButton('Begin', 'secondary');
     begin.classList.add('tablet-btn--hero');
     begin.addEventListener('click', () => {
@@ -120,7 +138,7 @@ function renderPage() {
       pageIndex = 1;
       renderPage();
     });
-    section.appendChild(begin);
+    section.append(intro, begin);
     root.appendChild(section);
     return;
   }
@@ -131,7 +149,7 @@ function renderPage() {
     title.textContent = 'Look Up';
     const message = document.createElement('p');
     message.className = 'tablet-look-up-message';
-    message.textContent = 'Your thread is now appearing on the projector.';
+    message.textContent = 'What your threads connect';
     section.append(title, message);
     root.appendChild(section);
     return;
@@ -162,12 +180,21 @@ function renderPage() {
 
   const hint = document.createElement('p');
   hint.className = 'tablet-page-hint';
-  hint.textContent =
-    page.key && SINGLE_SELECT_KEYS.has(page.key)
-      ? 'Tap one option (tap again to clear).'
-      : 'Tap one or more options.';
+  if (page.key && SINGLE_SELECT_KEYS.has(page.key)) {
+    hint.textContent = 'Tap one option (tap again to clear).';
+  } else if (page.key === 'goodExperiences' || page.key === 'badExperiences') {
+    hint.textContent = 'Tap up to 2 options (tap again to deselect).';
+  } else {
+    hint.textContent = 'Tap one or more options.';
+  }
   const nodes = document.createElement('div');
   nodes.className = 'tablet-nodes tablet-page-nodes';
+  if (page.key === 'goodExperiences' && draftSelections.goodExperiences.length > EXPERIENCES_SELECTION_MAX) {
+    draftSelections.goodExperiences = draftSelections.goodExperiences.slice(0, EXPERIENCES_SELECTION_MAX);
+  }
+  if (page.key === 'badExperiences' && draftSelections.badExperiences.length > EXPERIENCES_SELECTION_MAX) {
+    draftSelections.badExperiences = draftSelections.badExperiences.slice(0, EXPERIENCES_SELECTION_MAX);
+  }
   renderChoiceButtons(nodes, page.key, config[page.key] || []);
   const actions = document.createElement('div');
   actions.className = 'tablet-actions';
@@ -186,6 +213,55 @@ function renderPage() {
   section.append(headerRow, hint, nodes, actions);
   root.appendChild(section);
   syncContinueButtonState();
+}
+
+/**
+ * Rebuilds the current step. Optional motion: outgoing screen fades/zooms/blurs out, swap,
+ * then incoming fades/zooms/blurs in (“ghost zoom”). Skipped on first paint, config refresh,
+ * or prefers-reduced-motion.
+ * @param {{ skipTransition?: boolean }} opts
+ */
+function renderPage(opts = {}) {
+  const root = $(ids.page);
+  if (!root) return;
+
+  const skipTransition =
+    opts.skipTransition === true ||
+    !tabletRenderedOnce ||
+    prefersReducedMotion();
+
+  if (skipTransition) {
+    fadeGeneration += 1;
+    root.classList.remove('tablet-page--leave', 'tablet-page--enter-from');
+    renderPageCore();
+    tabletRenderedOnce = true;
+    root.scrollTop = 0;
+    return;
+  }
+
+  const gen = ++fadeGeneration;
+  root.classList.remove('tablet-page--enter-from');
+  root.classList.add('tablet-page--leave');
+
+  let settled = false;
+  const settle = () => {
+    if (settled || gen !== fadeGeneration) return;
+    settled = true;
+    clearTimeout(exitTimer);
+    renderPageCore();
+    tabletRenderedOnce = true;
+    root.scrollTop = 0;
+    root.classList.remove('tablet-page--leave');
+    root.classList.add('tablet-page--enter-from');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (gen !== fadeGeneration) return;
+        root.classList.remove('tablet-page--enter-from');
+      });
+    });
+  };
+
+  const exitTimer = setTimeout(settle, PAGE_TRANSITION_MS + 60);
 }
 
 function toggleTabletFullscreen() {
@@ -297,7 +373,14 @@ function setupListeners() {
 
     const idx = list.indexOf(opt);
     if (idx >= 0) list.splice(idx, 1);
-    else list.push(opt);
+    else {
+      if (
+        (cat === 'goodExperiences' || cat === 'badExperiences') &&
+        list.length >= EXPERIENCES_SELECTION_MAX
+      )
+        return;
+      list.push(opt);
+    }
     const isOn = idx < 0;
     btn.classList.toggle('tablet-node--on', isOn);
     btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
@@ -370,14 +453,12 @@ function submitSelections() {
 
 async function init() {
   await initState();
-  const v = $(ids.version);
-  if (v) v.textContent = `Version ${TABLET_VERSION}`;
   resetDraftSelections();
-  renderPage();
+  renderPage({ skipTransition: true });
   setupListeners();
   setupFullscreenCornerGesture();
   subscribeConfig(() => {
-    renderPage();
+    renderPage({ skipTransition: true });
   });
 }
 
