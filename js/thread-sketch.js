@@ -32,9 +32,10 @@ const LABEL_FADE_SPAN = 0.28;
 const LABEL_LINGER_MS = 2000;
 const LABEL_FONT_SIZE = 14;
 const LABEL_OFFSET = 14;
-const MAP_EDGE_HIT_PX = 30;
+const MAP_CORNER_HIT_PX = 26;
+const MAP_CORNER_HANDLE = 14;
 const MAP_EDGE_STROKE = 6;
-/** Square layout resolution; mapping scales this uniformly into the projection rect. */
+/** Fallback layout bounds; projection mapping warps nodes into an arbitrary quad on screen. */
 const DESIGN_LAYOUT_SIZE = 1000;
 const MAPPING_STORAGE_KEY = 'woven-projector-mapping';
 
@@ -300,107 +301,184 @@ function layoutBounds(layoutNodes, fallbackW, fallbackH) {
   return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
 }
 
-/** Map layout-space nodes into pixel rect (pw, ph) using uniform scale (geometry preserved). */
-function mapLayoutToPixels(layoutNodes, bounds, pw, ph, px0, py0) {
+/**
+ * Letterboxed layout → (u,v) in [0,1]², then bilinear to quad corners in pixels.
+ * Corners: tl (u=0,v=0), tr (1,0), br (1,1), bl (0,1); u right, v down (p5 coords).
+ */
+function mapLayoutToQuadPixels(layoutNodes, bounds, quadPx) {
   const bw = bounds.maxX - bounds.minX || 1;
   const bh = bounds.maxY - bounds.minY || 1;
-  const scale = Math.min(pw / bw, ph / bh);
-  const ox = px0 + (pw - scale * bw) / 2 - scale * bounds.minX;
-  const oy = py0 + (ph - scale * bh) / 2 - scale * bounds.minY;
-  return layoutNodes.map((n) => ({
-    ...n,
-    x: ox + scale * n.x,
-    y: oy + scale * n.y,
-  }));
+  const scale = Math.min(1 / bw, 1 / bh);
+  const ox = (1 - scale * bw) / 2 - scale * bounds.minX;
+  const oy = (1 - scale * bh) / 2 - scale * bounds.minY;
+  const { tl, tr, br, bl } = quadPx;
+  return layoutNodes.map((n) => {
+    let u = ox + scale * n.x;
+    let v = oy + scale * n.y;
+    u = Math.min(1, Math.max(0, u));
+    v = Math.min(1, Math.max(0, v));
+    const x =
+      (1 - u) * (1 - v) * tl.x +
+      u * (1 - v) * tr.x +
+      u * v * br.x +
+      (1 - u) * v * bl.x;
+    const y =
+      (1 - u) * (1 - v) * tl.y +
+      u * (1 - v) * tr.y +
+      u * v * br.y +
+      (1 - u) * v * bl.y;
+    return { ...n, x, y };
+  });
 }
 
-function clampMapping(m, minSpan = 0.05) {
-  let l = Math.max(0, Math.min(1, m.l));
-  let t = Math.max(0, Math.min(1, m.t));
-  let r = Math.max(0, Math.min(1, m.r));
-  let b = Math.max(0, Math.min(1, m.b));
-  if (r <= l) r = Math.min(1, l + minSpan);
-  if (b <= t) b = Math.min(1, t + minSpan);
-  if (r - l < minSpan) {
-    const mid = (l + r) / 2;
-    l = Math.max(0, mid - minSpan / 2);
-    r = Math.min(1, l + minSpan);
-    l = Math.max(0, r - minSpan);
-  }
-  if (b - t < minSpan) {
-    const mid = (t + b) / 2;
-    t = Math.max(0, mid - minSpan / 2);
-    b = Math.min(1, t + minSpan);
-    t = Math.max(0, b - minSpan);
-  }
-  return { l, t, r, b };
-}
-
-function loadMappingRect() {
-  try {
-    const raw = localStorage.getItem(MAPPING_STORAGE_KEY);
-    if (!raw) return { l: 0, t: 0, r: 1, b: 1 };
-    const o = JSON.parse(raw);
-    return clampMapping({
-      l: Number(o.l) || 0,
-      t: Number(o.t) || 0,
-      r: o.r !== undefined && o.r !== null ? Number(o.r) : 1,
-      b: o.b !== undefined && o.b !== null ? Number(o.b) : 1,
-    });
-  } catch (_) {
-    return { l: 0, t: 0, r: 1, b: 1 };
-  }
-}
-
-function saveMappingRect(m) {
-  try {
-    localStorage.setItem(MAPPING_STORAGE_KEY, JSON.stringify(clampMapping(m)));
-  } catch (_) {}
-}
-
-function pixelRectFromMapping(p, mapNorm) {
-  const w = p.width;
-  const h = p.height;
+/** @param {{ nx: number, ny: number }} c */
+function clampCorner(c) {
   return {
-    x: mapNorm.l * w,
-    y: mapNorm.t * h,
-    w: (mapNorm.r - mapNorm.l) * w,
-    h: (mapNorm.b - mapNorm.t) * h,
+    nx: Math.min(1, Math.max(0, Number(c.nx) || 0)),
+    ny: Math.min(1, Math.max(0, Number(c.ny) || 0)),
   };
 }
 
-/** @returns {'left'|'right'|'top'|'bottom'|null} */
-function pickProjectionEdge(mx, my, pr, tol) {
-  const { x, y, w, h } = pr;
-  /** @type {Array<[string, number]>} */
-  const candidates = [];
-  const dL = Math.abs(mx - x);
-  if (dL <= tol && my >= y - tol && my <= y + h + tol) candidates.push(['left', dL]);
-  const dR = Math.abs(mx - (x + w));
-  if (dR <= tol && my >= y - tol && my <= y + h + tol) candidates.push(['right', dR]);
-  const dT = Math.abs(my - y);
-  if (dT <= tol && mx >= x - tol && mx <= x + w + tol) candidates.push(['top', dT]);
-  const dB = Math.abs(my - (y + h));
-  if (dB <= tol && mx >= x - tol && mx <= x + w + tol) candidates.push(['bottom', dB]);
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => a[1] - b[1]);
-  return /** @type {'left'|'right'|'top'|'bottom'} */ (candidates[0][0]);
+/** @returns {{ tl: {nx,ny}, tr: {nx,ny}, br: {nx,ny}, bl: {nx,ny} }} */
+function clampMappingQuad(m) {
+  return {
+    tl: clampCorner(m.tl),
+    tr: clampCorner(m.tr),
+    br: clampCorner(m.br),
+    bl: clampCorner(m.bl),
+  };
 }
 
-function drawMappingEditOverlay(p, pr) {
+function loadMappingQuad() {
+  const num = (v, d) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+  const full = () =>
+    clampMappingQuad({
+      tl: { nx: 0, ny: 0 },
+      tr: { nx: 1, ny: 0 },
+      br: { nx: 1, ny: 1 },
+      bl: { nx: 0, ny: 1 },
+    });
+  try {
+    const raw = localStorage.getItem(MAPPING_STORAGE_KEY);
+    if (!raw) return full();
+    const o = JSON.parse(raw);
+    if (o.tl && o.tr && o.br && o.bl) {
+      return clampMappingQuad({
+        tl: { nx: num(o.tl.nx, 0), ny: num(o.tl.ny, 0) },
+        tr: { nx: num(o.tr.nx, 1), ny: num(o.tr.ny, 0) },
+        br: { nx: num(o.br.nx, 1), ny: num(o.br.ny, 1) },
+        bl: { nx: num(o.bl.nx, 0), ny: num(o.bl.ny, 1) },
+      });
+    }
+    if (o.l !== undefined || o.r !== undefined) {
+      const l = Math.max(0, Math.min(1, Number(o.l) || 0));
+      const t = Math.max(0, Math.min(1, Number(o.t) || 0));
+      const r = Math.max(0, Math.min(1, o.r !== undefined && o.r !== null ? Number(o.r) : 1));
+      const b = Math.max(0, Math.min(1, o.b !== undefined && o.b !== null ? Number(o.b) : 1));
+      return clampMappingQuad({
+        tl: { nx: l, ny: t },
+        tr: { nx: r, ny: t },
+        br: { nx: r, ny: b },
+        bl: { nx: l, ny: b },
+      });
+    }
+    return full();
+  } catch (_) {
+    return full();
+  }
+}
+
+function saveMappingQuad(m) {
+  try {
+    localStorage.setItem(MAPPING_STORAGE_KEY, JSON.stringify(clampMappingQuad(m)));
+  } catch (_) {}
+}
+
+/** Quad corners in pixel space (canonical u,v bilinear patch). */
+function quadPixelsFromMapping(p, mapNorm) {
+  const W = Math.max(1, p.width);
+  const H = Math.max(1, p.height);
+  const px = (c) => ({ x: c.nx * W, y: c.ny * H });
+  return {
+    tl: px(mapNorm.tl),
+    tr: px(mapNorm.tr),
+    br: px(mapNorm.br),
+    bl: px(mapNorm.bl),
+  };
+}
+
+/** Axis-aligned bbox of quad in pixels — drives relaxation footprint. */
+function quadAxisBoundsPx(q) {
+  const xs = [q.tl.x, q.tr.x, q.br.x, q.bl.x];
+  const ys = [q.tl.y, q.tr.y, q.br.y, q.bl.y];
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return { minX, minY, maxX, maxY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+}
+
+/** @returns {'tl'|'tr'|'br'|'bl'|null} */
+function pickProjectionCorner(mx, my, quadPx, tol) {
+  const pts = [
+    ['tl', quadPx.tl],
+    ['tr', quadPx.tr],
+    ['br', quadPx.br],
+    ['bl', quadPx.bl],
+  ];
+  let best = null;
+  let bestD = tol + 1;
+  for (const [name, pt] of pts) {
+    const d = Math.hypot(mx - pt.x, my - pt.y);
+    if (d <= tol && d < bestD) {
+      bestD = d;
+      best = name;
+    }
+  }
+  return /** @type {'tl'|'tr'|'br'|'bl'|null} */ (best);
+}
+
+function drawMappingEditOverlay(p, quadPx) {
   const W = p.width;
   const H = p.height;
+  const ctx = p.drawingContext;
   p.push();
-  p.fill(0, 0, 0, 110);
-  p.noStroke();
-  p.rect(0, 0, W, pr.y);
-  p.rect(0, pr.y + pr.h, W, Math.max(0, H - pr.y - pr.h));
-  p.rect(0, pr.y, pr.x, pr.h);
-  p.rect(pr.x + pr.w, pr.y, Math.max(0, W - pr.x - pr.w), pr.h);
+  if (ctx) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    const { tl, tr, br, bl } = quadPx;
+    ctx.moveTo(tl.x, tl.y);
+    ctx.lineTo(tr.x, tr.y);
+    ctx.lineTo(br.x, br.y);
+    ctx.lineTo(bl.x, bl.y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.43)';
+    ctx.fill('evenodd');
+    ctx.restore();
+  }
   p.noFill();
   p.stroke(255);
   p.strokeWeight(MAP_EDGE_STROKE);
-  p.rect(pr.x, pr.y, pr.w, pr.h);
+  p.beginShape();
+  p.vertex(quadPx.tl.x, quadPx.tl.y);
+  p.vertex(quadPx.tr.x, quadPx.tr.y);
+  p.vertex(quadPx.br.x, quadPx.br.y);
+  p.vertex(quadPx.bl.x, quadPx.bl.y);
+  p.endShape(p.CLOSE);
+
+  const h = MAP_CORNER_HANDLE;
+  p.rectMode(p.CENTER);
+  p.fill(255);
+  p.stroke(40);
+  p.strokeWeight(2);
+  for (const pt of [quadPx.tl, quadPx.tr, quadPx.br, quadPx.bl]) {
+    p.square(pt.x, pt.y, h);
+  }
+  p.rectMode(p.CORNER);
   p.pop();
 }
 
@@ -436,11 +514,11 @@ export function createThreadSketch(containerId) {
   let lastSubmittedSnapshot = JSON.stringify(options.submittedThreads || []);
   let debugMode = false;
   let mappingEditMode = false;
-  let mappingNorm = loadMappingRect();
+  let mappingNorm = loadMappingQuad();
   /** Vertical center of projection area (for label placement). */
   let projectionMidY = 0;
-  /** @type {'left'|'right'|'top'|'bottom'|null} */
-  let dragEdge = null;
+  /** @type {'tl'|'tr'|'br'|'bl'|null} */
+  let dragCorner = null;
   /** Opaque clears for a few frames after admin “redraw” to drop translucent trail buildup. */
   let solidBackgroundFramesRemaining = 0;
   /** Per-node label linger after thread passes ({ peak, until }). */
@@ -456,7 +534,7 @@ export function createThreadSketch(containerId) {
     layerDirty = true;
   }
 
-  /** Full visual refresh after mapping rectangle changes (paths + raster cache use node coords). */
+  /** Full visual refresh after mapping quad changes (paths + raster cache use node coords). */
   function invalidateAfterMappingEdit() {
     nodesDirty = true;
     layerDirty = true;
@@ -477,13 +555,15 @@ export function createThreadSketch(containerId) {
   function refreshNodes(p) {
     if (!nodesDirty) return;
     const raw = buildNodesFromConfig(config);
-    const pr = pixelRectFromMapping(p, mappingNorm);
-    const lw = Math.max(1, pr.w);
-    const lh = Math.max(1, pr.h);
+    const quadPx = quadPixelsFromMapping(p, mappingNorm);
+    const aabb = quadAxisBoundsPx(quadPx);
+    const lw = aabb.w;
+    const lh = aabb.h;
     const layoutNodes = getNodePositionsLayoutSpace(raw, lw, lh);
     const bounds = layoutBounds(layoutNodes, lw, lh);
-    nodes = mapLayoutToPixels(layoutNodes, bounds, pr.w, pr.h, pr.x, pr.y);
-    projectionMidY = pr.y + pr.h / 2;
+    nodes = mapLayoutToQuadPixels(layoutNodes, bounds, quadPx);
+    projectionMidY =
+      (quadPx.tl.y + quadPx.tr.y + quadPx.br.y + quadPx.bl.y) / 4;
     nodeById = new Map(nodes.map((n) => [n.id, n]));
     nodesVersion += 1;
     nodesDirty = false;
@@ -804,7 +884,7 @@ export function createThreadSketch(containerId) {
       });
 
       if (debugMode && mappingEditMode) {
-        drawMappingEditOverlay(p, pixelRectFromMapping(p, mappingNorm));
+        drawMappingEditOverlay(p, quadPixelsFromMapping(p, mappingNorm));
       }
       if (debugMode) {
         p.push();
@@ -814,11 +894,14 @@ export function createThreadSketch(containerId) {
         p.textFont('Montserrat');
         p.textSize(15);
         const mo = mappingNorm;
+        const c = (k) => `${mo[k].nx.toFixed(2)},${mo[k].ny.toFixed(2)}`;
         const lines = [
           'Debug ON — D hide · F fullscreen',
           `FPS ~${p.frameRate().toFixed(0)}`,
-          `Map L ${mo.l.toFixed(3)} T ${mo.t.toFixed(3)} R ${mo.r.toFixed(3)} B ${mo.b.toFixed(3)}`,
-          mappingEditMode ? 'Mapping edit ON — M off · drag edges · arrows move rect' : 'M — mapping edit',
+          `Map tl ${c('tl')} tr ${c('tr')} br ${c('br')} bl ${c('bl')}`,
+          mappingEditMode
+            ? 'Mapping edit ON — M off · drag corner squares · arrows nudge all'
+            : 'M — mapping edit',
         ];
         let ly = 10;
         for (const line of lines) {
@@ -831,27 +914,25 @@ export function createThreadSketch(containerId) {
 
     p.mousePressed = function () {
       if (!debugMode || !mappingEditMode) return;
-      const pr = pixelRectFromMapping(p, mappingNorm);
-      dragEdge = pickProjectionEdge(p.mouseX, p.mouseY, pr, MAP_EDGE_HIT_PX);
+      const q = quadPixelsFromMapping(p, mappingNorm);
+      dragCorner = pickProjectionCorner(p.mouseX, p.mouseY, q, MAP_CORNER_HIT_PX);
     };
 
     p.mouseReleased = function () {
-      const hadDrag = !!dragEdge;
-      if (dragEdge) saveMappingRect(mappingNorm);
-      dragEdge = null;
+      const hadDrag = !!dragCorner;
+      if (dragCorner) saveMappingQuad(mappingNorm);
+      dragCorner = null;
       if (hadDrag) invalidateAfterMappingEdit();
     };
 
     p.mouseDragged = function () {
-      if (!mappingEditMode || !dragEdge) return;
-      const dx = (p.mouseX - p.pmouseX) / p.width;
-      const dy = (p.mouseY - p.pmouseY) / p.height;
-      const m = { ...mappingNorm };
-      if (dragEdge === 'left') m.l += dx;
-      if (dragEdge === 'right') m.r += dx;
-      if (dragEdge === 'top') m.t += dy;
-      if (dragEdge === 'bottom') m.b += dy;
-      mappingNorm = clampMapping(m);
+      if (!mappingEditMode || !dragCorner) return;
+      const nx = Math.min(1, Math.max(0, p.mouseX / Math.max(1, p.width)));
+      const ny = Math.min(1, Math.max(0, p.mouseY / Math.max(1, p.height)));
+      mappingNorm = clampMappingQuad({
+        ...mappingNorm,
+        [dragCorner]: { nx, ny },
+      });
       nodesDirty = true;
       markLayerDirty();
     };
@@ -872,7 +953,7 @@ export function createThreadSketch(containerId) {
         debugMode = !debugMode;
         if (!debugMode) {
           mappingEditMode = false;
-          dragEdge = null;
+          dragCorner = null;
         }
         syncProjectorDebugChrome();
         return false;
@@ -880,7 +961,7 @@ export function createThreadSketch(containerId) {
       if ((p.key === 'm' || p.key === 'M') && debugMode) {
         const wasEditing = mappingEditMode;
         mappingEditMode = !mappingEditMode;
-        if (!mappingEditMode) dragEdge = null;
+        if (!mappingEditMode) dragCorner = null;
         if (wasEditing && !mappingEditMode) invalidateAfterMappingEdit();
         return false;
       }
@@ -894,14 +975,17 @@ export function createThreadSketch(containerId) {
         if (dh !== 0 || dv !== 0) {
           const stepX = 4 / Math.max(1, p.width);
           const stepY = 4 / Math.max(1, p.height);
-          const m = { ...mappingNorm };
-          m.l += dh * stepX;
-          m.r += dh * stepX;
-          m.t += dv * stepY;
-          m.b += dv * stepY;
-          mappingNorm = clampMapping(m);
+          const ddx = dh * stepX;
+          const ddy = dv * stepY;
+          const m = mappingNorm;
+          mappingNorm = clampMappingQuad({
+            tl: { nx: m.tl.nx + ddx, ny: m.tl.ny + ddy },
+            tr: { nx: m.tr.nx + ddx, ny: m.tr.ny + ddy },
+            br: { nx: m.br.nx + ddx, ny: m.br.ny + ddy },
+            bl: { nx: m.bl.nx + ddx, ny: m.bl.ny + ddy },
+          });
           invalidateAfterMappingEdit();
-          saveMappingRect(mappingNorm);
+          saveMappingQuad(mappingNorm);
           return false;
         }
       }
